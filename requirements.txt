@@ -2,3 +2,4 @@ flask
 opencv-python
 RPi.GPIO
 toml
+picamera2

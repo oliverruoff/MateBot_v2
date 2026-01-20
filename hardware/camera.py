@@ -1,39 +1,52 @@
 import cv2
 import numpy as np
+import io
+import threading
+from picamera2 import Picamera2
+from picamera2.encoders import MjpegEncoder
+from picamera2.outputs import FileOutput
+
+class StreamingOutput(io.BufferedIOBase):
+    def __init__(self):
+        self.frame = None
+        self.condition = threading.Condition()
+
+    def write(self, buf):
+        with self.condition:
+            self.frame = buf
+            self.condition.notify_all()
 
 class Camera:
     def __init__(self):
-        # 0 ist meistens die Standard Raspberry Pi Kamera (/dev/video0)
-        self.video = cv2.VideoCapture(0)
-        # Auflösung reduzieren für flüssiges Streaming im WLAN
-        self.video.set(3, 640)
-        self.video.set(4, 480)
-        
-        self.is_opened = self.video.isOpened()
-        if not self.is_opened:
-            print("WARNUNG: Kamera konnte nicht geöffnet werden.")
+        self.picam2 = None
         self.placeholder = self._create_placeholder()
+        self.output = StreamingOutput()
+        try:
+            self.picam2 = Picamera2()
+            config = self.picam2.create_video_configuration(main={"size": (640, 480)})
+            self.picam2.configure(config)
+            self.picam2.start_recording(MjpegEncoder(), FileOutput(self.output))
+            print("INFO: Picamera2 initialisiert und Aufnahme gestartet.")
+        except Exception as e:
+            print(f"WARNUNG: Picamera2 konnte nicht initialisiert werden: {e}")
+            self.picam2 = None
 
     def __del__(self):
-        if self.is_opened:
-            self.video.release()
+        if self.picam2:
+            self.picam2.stop_recording()
 
     def get_frame(self):
-        if not self.is_opened:
+        if not self.picam2:
             return self.placeholder
 
-        success, image = self.video.read()
-        if not success:
-            # Wenn das Lesen fehlschlägt, gib das Platzhalterbild zurück
+        try:
+            with self.output.condition:
+                self.output.condition.wait()
+                frame = self.output.frame
+            return frame
+        except Exception as e:
+            print(f"FEHLER: Frame konnte nicht gelesen werden: {e}")
             return self.placeholder
-        
-        # Encode als JPEG
-        ret, jpeg = cv2.imencode('.jpg', image)
-        if not ret:
-            # Wenn die Kodierung fehlschlägt, gib das Platzhalterbild zurück
-            return self.placeholder
-
-        return jpeg.tobytes()
 
     def _create_placeholder(self):
         # Schwarzes Bild erstellen
