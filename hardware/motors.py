@@ -5,7 +5,7 @@ import toml
 
 class RobotMover:
     def __init__(self, config_path="config.toml"):
-        with open(config_path, "rb") as f:
+        with open(config_path, "r") as f:
             self.config = toml.load(f)
         
         self.pins = self.config["motors"]
