@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roboter Cockpit</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>MARS ROVER CONTROL</h1>
+        
+        <div class="camera-feed">
+            <img src="{{ url_for('video_feed') }}" alt="Live Kamera">
+            <div class="overlay">LIVE FEED</div>
+        </div>
+
+        <div class="controls-grid">
+            <button class="btn strafe" onmousedown="sendCommand('strafe_left')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('strafe_left')" ontouchend="sendCommand('stop')">⟵ Slide</button>
+            <button class="btn forward" onmousedown="sendCommand('forward')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('forward')" ontouchend="sendCommand('stop')">▲</button>
+            <button class="btn strafe" onmousedown="sendCommand('strafe_right')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('strafe_right')" ontouchend="sendCommand('stop')">Slide ⟶</button>
+            
+            <button class="btn left" onmousedown="sendCommand('left')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('left')" ontouchend="sendCommand('stop')">◀</button>
+            <button class="btn center" disabled>STOP</button>
+            <button class="btn right" onmousedown="sendCommand('right')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('right')" ontouchend="sendCommand('stop')">▶</button>
+            
+            <div class="spacer"></div>
+            <button class="btn backward" onmousedown="sendCommand('backward')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('backward')" ontouchend="sendCommand('stop')">▼</button>
+            <div class="spacer"></div>
+        </div>
+        
+        <p id="status">Status: Bereit</p>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
