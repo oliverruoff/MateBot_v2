@@ -12,7 +12,7 @@ class Camera:
         self.is_opened = self.video.isOpened()
         if not self.is_opened:
             print("WARNUNG: Kamera konnte nicht geöffnet werden.")
-            self.placeholder = self._create_placeholder()
+        self.placeholder = self._create_placeholder()
 
     def __del__(self):
         if self.is_opened:
