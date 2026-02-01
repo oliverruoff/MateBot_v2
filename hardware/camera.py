@@ -13,12 +13,18 @@ class Camera:
             print("INFO: Initialisiere Picamera2...")
             self.picam2 = Picamera2()
             
-            # KORREKTUR: Wir nutzen create_video_configuration statt create_configuration
             config = self.picam2.create_video_configuration(main={"size": (640, 480), "format": "RGB888"})
             self.picam2.configure(config)
             
             # Kamera starten
             self.picam2.start()
+            
+            # Rotation um 180 Grad
+            try:
+                self.picam2.set_controls({"Rotation": 180})
+                print("INFO: Rotation auf 180° gesetzt.")
+            except:
+                print("WARNUNG: Native Rotation nicht unterstützt.")
             
             # Kurz warten (Warmup)
             time.sleep(2)
@@ -26,7 +32,6 @@ class Camera:
             
         except Exception as e:
             print(f"WARNUNG: Picamera2 konnte nicht initialisiert werden: {e}")
-            # Wichtig: Fehler im Detail ausgeben, falls es immer noch kracht
             import traceback
             traceback.print_exc()
             self.picam2 = None

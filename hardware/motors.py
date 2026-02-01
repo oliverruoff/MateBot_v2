@@ -4,10 +4,6 @@ import pigpio
 import toml
 import sys
 
-# Motor directions based on original MateBot logic
-# 0 = CCW, 1 = CW (Assuming same wiring)
-# Forward: FL=CCW(0), FR=CW(1), BL=CCW(0), BR=CW(1)
-
 class RobotMover:
     def __init__(self, config_path="config.toml"):
         print(f"RobotMover: Initializing with {config_path}", file=sys.stderr)
@@ -16,9 +12,9 @@ class RobotMover:
                 self.config = toml.load(f)
             
             self.pins = self.config["motors"]
-            # Default frequency: for 0.0005 delay it was ~1000Hz.
-            self.default_frequency = 2000 
+            self.delay = float(self.config["robot"]["speed_delay"])
             self.current_command = None
+            self.lock = threading.Lock()
             
             self.pi = pigpio.pi()
             if not self.pi.connected:
@@ -32,20 +28,14 @@ class RobotMover:
             for key in self.motor_keys:
                 self.pi.set_mode(self.pins[key]["dir"], pigpio.OUTPUT)
                 self.pi.set_mode(self.pins[key]["step"], pigpio.OUTPUT)
-                # Ensure no PWM at start
-                self.pi.set_PWM_dutycycle(self.pins[key]["step"], 0)
+                self.pi.write(self.pins[key]["step"], 0)
                 
-            # Optional Microstepping pins (if present in config)
-            self.m_pins = []
-            for m in ["m0", "m1", "m2"]:
-                if m in self.pins:
-                    pin = self.pins[m]
-                    self.pi.set_mode(pin, pigpio.OUTPUT)
-                    self.m_pins.append(pin)
-
-            # Activate motors
+            # Enable motors (DRV8825 Sleep Pin HIGH = Awake)
             self.activate()
-            print("RobotMover: Initialization complete with Hardware PWM support!", file=sys.stderr)
+            
+            self.thread = threading.Thread(target=self._loop, daemon=True)
+            self.thread.start()
+            print("RobotMover: Loop started successfully.", file=sys.stderr)
             
         except Exception as e:
             print(f"RobotMover INIT ERROR: {e}", file=sys.stderr)
@@ -53,79 +43,63 @@ class RobotMover:
 
     def activate(self):
         self.pi.write(self.pins["sleep_pin"], 1)
-        time.sleep(0.1) # Wait for drivers to wake up
+        print("RobotMover: Motors ACTIVE (Sleep Pin HIGH)", file=sys.stderr)
+        time.sleep(0.1)
 
     def deactivate(self):
         self.pi.write(self.pins["sleep_pin"], 0)
+        print("RobotMover: Motors SLEEP (Sleep Pin LOW)", file=sys.stderr)
 
-    def set_command(self, command, frequency=None):
-        """ Sets movement using Hardware PWM """
-        if frequency is None:
-            frequency = self.default_frequency
+    def set_delay(self, new_delay):
+        with self.lock:
+            self.delay = float(new_delay)
+        print(f"RobotMover: Delay updated to {self.delay}", file=sys.stderr)
 
-        if command == self.current_command and command is not None:
-            return
+    def set_command(self, command):
+        with self.lock:
+            self.current_command = command
+        if command:
+            print(f"RobotMover: Command set to {command}", file=sys.stderr)
 
-        self.current_command = command
-        print(f"RobotMover: Executing '{command}' at {frequency}Hz", file=sys.stderr)
+    def _step_all(self, fl_dir, fr_dir, bl_dir, br_dir):
+        # Set directions
+        self.pi.write(self.pins["fl"]["dir"], fl_dir)
+        self.pi.write(self.pins["fr"]["dir"], fr_dir)
+        self.pi.write(self.pins["bl"]["dir"], bl_dir)
+        self.pi.write(self.pins["br"]["dir"], br_dir)
+        
+        # Trigger pulses simultaneously (10us pulse)
+        self.pi.gpio_trigger(self.pins["fl"]["step"], 10, 1)
+        self.pi.gpio_trigger(self.pins["fr"]["step"], 10, 1)
+        self.pi.gpio_trigger(self.pins["bl"]["step"], 10, 1)
+        self.pi.gpio_trigger(self.pins["br"]["step"], 10, 1)
 
-        if not command or command == "stop":
-            self._stop_all()
-            return
-
-        # Directions (based on Robot.py in original MateBot)
-        if command == "forward":
-            self._set_motor("fl", 0, frequency)
-            self._set_motor("fr", 1, frequency)
-            self._set_motor("bl", 0, frequency)
-            self._set_motor("br", 1, frequency)
-        elif command == "backward":
-            self._set_motor("fl", 1, frequency)
-            self._set_motor("fr", 0, frequency)
-            self._set_motor("bl", 1, frequency)
-            self._set_motor("br", 0, frequency)
-        elif command == "left":
-            self._set_motor("fl", 1, frequency)
-            self._set_motor("fr", 1, frequency)
-            self._set_motor("bl", 1, frequency)
-            self._set_motor("br", 1, frequency)
-        elif command == "right":
-            self._set_motor("fl", 0, frequency)
-            self._set_motor("fr", 0, frequency)
-            self._set_motor("bl", 0, frequency)
-            self._set_motor("br", 0, frequency)
-        elif command == "strafe_left":
-            self._set_motor("fl", 1, frequency)
-            self._set_motor("fr", 1, frequency)
-            self._set_motor("bl", 0, frequency)
-            self._set_motor("br", 0, frequency)
-        elif command == "strafe_right":
-            self._set_motor("fl", 0, frequency)
-            self._set_motor("fr", 0, frequency)
-            self._set_motor("bl", 1, frequency)
-            self._set_motor("br", 1, frequency)
-
-    def _set_motor(self, key, direction, frequency):
-        p = self.pins[key]
-        self.pi.write(p["dir"], direction)
-        self.pi.set_PWM_frequency(p["step"], frequency)
-        self.pi.set_PWM_dutycycle(p["step"], 128) # 50% duty cycle
-
-    def _stop_all(self):
-        for key in self.motor_keys:
-            self.pi.set_PWM_dutycycle(self.pins[key]["step"], 0)
-
-    def set_delay(self, delay):
-        """ Convert delay to frequency and update """
-        freq = int(1.0 / (float(delay) * 2))
-        self.default_frequency = freq
-        if self.current_command and self.current_command != "stop":
-            cmd = self.current_command
-            self.current_command = None 
-            self.set_command(cmd, freq)
+    def _loop(self):
+        while True:
+            with self.lock:
+                cmd = self.current_command
+                delay = self.delay
+            
+            if cmd:
+                if cmd == "forward":
+                    self._step_all(0, 1, 0, 1)
+                elif cmd == "backward":
+                    self._step_all(1, 0, 1, 0)
+                elif cmd == "left":
+                    self._step_all(1, 1, 1, 1)
+                elif cmd == "right":
+                    self._step_all(0, 0, 0, 0)
+                elif cmd == "strafe_left":
+                    self._step_all(1, 1, 0, 0)
+                elif cmd == "strafe_right":
+                    self._step_all(0, 0, 1, 1)
+                
+                time.sleep(delay)
+            else:
+                time.sleep(0.01)
 
     def cleanup(self):
-        self._stop_all()
+        self.set_command(None)
         self.deactivate()
         if hasattr(self, 'pi'):
             self.pi.stop()
