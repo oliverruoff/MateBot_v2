@@ -1,6 +1,7 @@
 from flask import Flask, render_template, Response, request, jsonify
 from hardware.camera import Camera
 from hardware.motors import RobotMover
+from hardware.mpu import MPU6050
 import hardware.motors
 import time
 import sys
@@ -9,6 +10,7 @@ app = Flask(__name__)
 
 # Hardware initialisieren
 motor_controller = RobotMover()
+imu = MPU6050()
 
 def gen(camera):
     while True:
@@ -53,6 +55,12 @@ def toggle_logic():
         motor_controller.activate()
         return jsonify({'status': 'success', 'active_low': motor_controller.active_low})
     return jsonify({'status': 'error'}), 500
+
+@app.route('/telemetry')
+def telemetry():
+    if imu and imu.available:
+        return jsonify(imu.get_data())
+    return jsonify({'error': 'IMU not available'}), 503
 
 if __name__ == '__main__':
     try:

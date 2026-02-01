@@ -31,6 +31,24 @@
             </div>
         </div>
 
+        <div class="telemetry">
+            <h2>IMU Telemetry</h2>
+            <div class="imu-grid">
+                <div class="imu-card">
+                    <h3>Acceleration (g)</h3>
+                    <div class="bar-container"><div id="acc-x" class="bar">X: 0.00</div></div>
+                    <div class="bar-container"><div id="acc-y" class="bar">Y: 0.00</div></div>
+                    <div class="bar-container"><div id="acc-z" class="bar">Z: 0.00</div></div>
+                </div>
+                <div class="imu-card">
+                    <h3>Gyroscope (°/s)</h3>
+                    <div id="gyro-x">X: 0.00</div>
+                    <div id="gyro-y">Y: 0.00</div>
+                    <div id="gyro-z">Z: 0.00</div>
+                </div>
+            </div>
+        </div>
+
         <div class="controls-grid">
             <button class="btn strafe" onmousedown="sendCommand('strafe_left')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('strafe_left')" ontouchend="sendCommand('stop')">⟵ Slide</button>
             <button class="btn forward" onmousedown="sendCommand('forward')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('forward')" ontouchend="sendCommand('stop')">▲</button>

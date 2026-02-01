@@ -32,3 +32,32 @@ function toggleLogic() {
       })
       .catch(error => console.error('Error:', error));
 }
+
+function updateTelemetry() {
+    fetch('/telemetry')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) return;
+            
+            // Update Accelerometer Bars
+            updateBar('acc-x', data.accel.x, 2);
+            updateBar('acc-y', data.accel.y, 2);
+            updateBar('acc-z', data.accel.z, 2);
+            
+            // Update Gyro Text
+            document.getElementById('gyro-x').innerText = `X: ${data.gyro.x.toFixed(2)} °/s`;
+            document.getElementById('gyro-y').innerText = `Y: ${data.gyro.y.toFixed(2)} °/s`;
+            document.getElementById('gyro-z').innerText = `Z: ${data.gyro.z.toFixed(2)} °/s`;
+        })
+        .catch(error => console.error('IMU Error:', error));
+}
+
+function updateBar(id, value, max) {
+    const el = document.getElementById(id);
+    const percentage = Math.min(Math.max((value + max) / (max * 2) * 100, 0), 100);
+    el.style.width = percentage + '%';
+    el.innerText = `${id.split('-')[1].toUpperCase()}: ${value.toFixed(2)}`;
+}
+
+// Poll telemetry every 100ms
+setInterval(updateTelemetry, 100);

@@ -68,3 +68,59 @@ h1 {
     font-weight: bold;
     color: #aaa;
 }
+
+.telemetry {
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.imu-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.imu-card h3 {
+    font-size: 14px;
+    margin-top: 0;
+    color: #888;
+}
+
+.bar-container {
+    background: #000;
+    height: 20px;
+    border-radius: 10px;
+    margin: 5px 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.bar {
+    background: #00ffcc;
+    height: 100%;
+    width: 50%;
+    transition: width 0.1s;
+    text-align: center;
+    font-size: 10px;
+    line-height: 20px;
+    color: #000;
+}
+
+.settings {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.btn-toggle {
+    background: #333;
+    color: #00ffcc;
+    border: 1px solid #00ffcc;
+    padding: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+}
