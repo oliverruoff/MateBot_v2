@@ -3,6 +3,7 @@ import time
 import cv2
 import numpy as np
 from picamera2 import Picamera2
+from libcamera import Transform
 
 class Camera:
     def __init__(self):
@@ -10,21 +11,18 @@ class Camera:
         self.placeholder = self._create_placeholder()
         
         try:
-            print("INFO: Initialisiere Picamera2...")
+            print("INFO: Initialisiere Picamera2 mit 180° Rotation...")
             self.picam2 = Picamera2()
             
-            config = self.picam2.create_video_configuration(main={"size": (640, 480), "format": "RGB888"})
+            # Rotation um 180 Grad mittels Transform
+            config = self.picam2.create_video_configuration(
+                main={"size": (640, 480), "format": "RGB888"},
+                transform=Transform(hflip=True, vflip=True)
+            )
             self.picam2.configure(config)
             
             # Kamera starten
             self.picam2.start()
-            
-            # Rotation um 180 Grad
-            try:
-                self.picam2.set_controls({"Rotation": 180})
-                print("INFO: Rotation auf 180° gesetzt.")
-            except:
-                print("WARNUNG: Native Rotation nicht unterstützt.")
             
             # Kurz warten (Warmup)
             time.sleep(2)

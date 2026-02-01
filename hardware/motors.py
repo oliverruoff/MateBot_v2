@@ -35,16 +35,17 @@ class RobotMover:
             
             self.thread = threading.Thread(target=self._loop, daemon=True)
             self.thread.start()
-            print("RobotMover: Loop started successfully.", file=sys.stderr)
+            print("RobotMover: Ready.", file=sys.stderr)
             
         except Exception as e:
             print(f"RobotMover INIT ERROR: {e}", file=sys.stderr)
             raise
 
     def activate(self):
+        # Many high-power drivers use Active LOW for ENA pin.
         self.pi.write(self.pins["sleep_pin"], 1)
         print("RobotMover: Motors ACTIVE (Sleep Pin HIGH)", file=sys.stderr)
-        time.sleep(0.1)
+        time.sleep(0.5)
 
     def deactivate(self):
         self.pi.write(self.pins["sleep_pin"], 0)
@@ -53,13 +54,10 @@ class RobotMover:
     def set_delay(self, new_delay):
         with self.lock:
             self.delay = float(new_delay)
-        print(f"RobotMover: Delay updated to {self.delay}", file=sys.stderr)
 
     def set_command(self, command):
         with self.lock:
             self.current_command = command
-        if command:
-            print(f"RobotMover: Command set to {command}", file=sys.stderr)
 
     def _step_all(self, fl_dir, fr_dir, bl_dir, br_dir):
         # Set directions
@@ -68,11 +66,14 @@ class RobotMover:
         self.pi.write(self.pins["bl"]["dir"], bl_dir)
         self.pi.write(self.pins["br"]["dir"], br_dir)
         
-        # Trigger pulses simultaneously (10us pulse)
-        self.pi.gpio_trigger(self.pins["fl"]["step"], 10, 1)
-        self.pi.gpio_trigger(self.pins["fr"]["step"], 10, 1)
-        self.pi.gpio_trigger(self.pins["bl"]["step"], 10, 1)
-        self.pi.gpio_trigger(self.pins["br"]["step"], 10, 1)
+        # Settle time for DIR pin
+        time.sleep(0.00001) 
+        
+        # Trigger pulses simultaneously (20us pulse for big drivers)
+        self.pi.gpio_trigger(self.pins["fl"]["step"], 20, 1)
+        self.pi.gpio_trigger(self.pins["fr"]["step"], 20, 1)
+        self.pi.gpio_trigger(self.pins["bl"]["step"], 20, 1)
+        self.pi.gpio_trigger(self.pins["br"]["step"], 20, 1)
 
     def _loop(self):
         while True:
@@ -99,7 +100,6 @@ class RobotMover:
                 time.sleep(0.01)
 
     def cleanup(self):
-        self.set_command(None)
         self.deactivate()
         if hasattr(self, 'pi'):
             self.pi.stop()
