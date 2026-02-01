@@ -1,53 +1,54 @@
 # MateBot v2 - SLAM Robot Requirements
+# Using compatible release specifiers for Python 3.13+ compatibility
 
 # Core Dependencies
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-websockets==12.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+websockets>=12.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 
-# Hardware Interfaces
+# Hardware Interfaces (pinned versions for hardware compatibility)
 RPi.GPIO==0.7.1
-pigpio==1.78  # Hardware PWM for stepper motors
-smbus2==0.4.3  # I2C for IMU
-pyserial==3.5  # Serial for LiDAR
-picamera2==0.3.16
+pigpio==1.78
+smbus2>=0.4.3
+pyserial>=3.5
+picamera2>=0.3.16
 
 # Computer Vision & Image Processing
-opencv-python==4.8.1.78
-numpy==1.24.3
-scipy==1.11.4
-Pillow==10.1.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+scipy>=1.11.0
+Pillow>=10.0.0
 
 # SLAM & Robotics
-scikit-image==0.22.0  # Image processing for SLAM
-filterpy==1.4.5  # Kalman and particle filters
+scikit-image>=0.22.0
+filterpy>=1.4.5
 
 # LiDAR Drivers
-rplidar-roboticia==1.0.2  # RPLIDAR support
+rplidar-roboticia>=1.0.2
 
 # Path Planning & Navigation
-networkx==3.2.1  # Graph algorithms for path planning
-shapely==2.0.2  # Geometric operations
+networkx>=3.2.0
+shapely>=2.0.2
 
 # Data Storage
-SQLAlchemy==2.0.23
-aiosqlite==0.19.0
+SQLAlchemy>=2.0.23
+aiosqlite>=0.19.0
 
 # Configuration
-PyYAML==6.0.1
-python-dotenv==1.0.0
+PyYAML>=6.0.1
+python-dotenv>=1.0.0
 
 # Logging & Monitoring
-loguru==0.7.2
+loguru>=0.7.2
 
 # Utilities
-python-dateutil==2.8.2
-aiofiles==23.2.1
+python-dateutil>=2.8.2
+aiofiles>=23.2.0
 
-# Development
-pytest==7.4.3
-pytest-asyncio==0.21.1
-black==23.11.0
+# Development (optional, can be installed separately)
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+black>=23.11.0
