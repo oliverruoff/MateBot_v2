@@ -91,22 +91,41 @@ h1 {
 
 .bar-container {
     background: #000;
-    height: 20px;
-    border-radius: 10px;
-    margin: 5px 0;
+    height: 24px;
+    border-radius: 12px;
+    margin: 8px 0;
     overflow: hidden;
     position: relative;
+    border: 1px solid #444;
+}
+
+.bar-container::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(255,255,255,0.3);
+    z-index: 1;
 }
 
 .bar {
-    background: #00ffcc;
+    background: linear-gradient(90deg, #00ffcc, #00ccaa);
     height: 100%;
     width: 50%;
-    transition: width 0.1s;
-    text-align: center;
-    font-size: 10px;
-    line-height: 20px;
-    color: #000;
+    transition: width 0.05s ease-out;
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 24px;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    white-space: nowrap;
 }
 
 .settings {
