@@ -12,10 +12,12 @@ class RobotMover:
                 self.config = toml.load(f)
             
             self.pins = self.config["motors"]
-            self.delay = float(self.config["robot"]["speed_delay"])
-            self.active_low = self.pins.get("active_low", False)
+            self.active_low = self.pins.get("active_low", True)
+            
+            # Convert delay to frequency
+            self.target_frequency = 8000 
+            self.current_frequency = 0
             self.current_command = None
-            self.lock = threading.Lock()
             
             self.pi = pigpio.pi()
             if not self.pi.connected:
@@ -29,13 +31,16 @@ class RobotMover:
             for key in self.motor_keys:
                 self.pi.set_mode(self.pins[key]["dir"], pigpio.OUTPUT)
                 self.pi.set_mode(self.pins[key]["step"], pigpio.OUTPUT)
-                self.pi.write(self.pins[key]["step"], 0)
+                self.pi.set_PWM_dutycycle(self.pins[key]["step"], 0)
                 
             self.activate()
             
-            self.thread = threading.Thread(target=self._loop, daemon=True)
-            self.thread.start()
-            print("RobotMover: Ready.", file=sys.stderr)
+            # Ramping thread
+            self.running = True
+            self.ramp_thread = threading.Thread(target=self._ramping_loop, daemon=True)
+            self.ramp_thread.start()
+            
+            print("RobotMover: Hardware PWM with Ramping initialized.", file=sys.stderr)
             
         except Exception as e:
             print(f"RobotMover INIT ERROR: {e}", file=sys.stderr)
@@ -44,54 +49,69 @@ class RobotMover:
     def activate(self):
         state = 0 if self.active_low else 1
         self.pi.write(self.pins["sleep_pin"], state)
-        print(f"RobotMover: Motors ENABLED (Sleep Pin {self.pins['sleep_pin']} = {state})", file=sys.stderr)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def deactivate(self):
         state = 1 if self.active_low else 0
         self.pi.write(self.pins["sleep_pin"], state)
-        print(f"RobotMover: Motors DISABLED (Sleep Pin {self.pins['sleep_pin']} = {state})", file=sys.stderr)
 
     def set_delay(self, new_delay):
-        with self.lock:
-            self.delay = float(new_delay)
+        try:
+            new_freq = int(1.0 / (float(new_delay) * 2))
+            self.target_frequency = min(max(new_freq, 100), 15000)
+            print(f"RobotMover: Target frequency updated to {self.target_frequency}Hz", file=sys.stderr)
+        except:
+            pass
 
     def set_command(self, command):
-        with self.lock:
-            self.current_command = command
-
-    def _step_all(self, fl_dir, fr_dir, bl_dir, br_dir):
-        self.pi.write(self.pins["fl"]["dir"], fl_dir)
-        self.pi.write(self.pins["fr"]["dir"], fr_dir)
-        self.pi.write(self.pins["bl"]["dir"], bl_dir)
-        self.pi.write(self.pins["br"]["dir"], br_dir)
-        
-        time.sleep(0.00001) 
-        
-        # Increased pulse width to 30us for reliability
-        self.pi.gpio_trigger(self.pins["fl"]["step"], 30, 1)
-        self.pi.gpio_trigger(self.pins["fr"]["step"], 30, 1)
-        self.pi.gpio_trigger(self.pins["bl"]["step"], 30, 1)
-        self.pi.gpio_trigger(self.pins["br"]["step"], 30, 1)
-
-    def _loop(self):
-        while True:
-            with self.lock:
-                cmd = self.current_command
-                delay = self.delay
+        if command == self.current_command:
+            return
             
-            if cmd:
-                if cmd == "forward": self._step_all(0, 1, 0, 1)
-                elif cmd == "backward": self._step_all(1, 0, 1, 0)
-                elif cmd == "left": self._step_all(1, 1, 1, 1)
-                elif cmd == "right": self._step_all(0, 0, 0, 0)
-                elif cmd == "strafe_left": self._step_all(1, 1, 0, 0)
-                elif cmd == "strafe_right": self._step_all(0, 0, 1, 1)
-                time.sleep(delay)
+        if not command or command == "stop":
+            self.current_command = None
+            return
+
+        # Set directions immediately
+        if command == "forward": self._set_dirs(0, 1, 0, 1)
+        elif command == "backward": self._set_dirs(1, 0, 1, 0)
+        elif command == "left": self._set_dirs(1, 1, 1, 1)
+        elif command == "right": self._set_dirs(0, 0, 0, 0)
+        elif command == "strafe_left": self._set_dirs(1, 1, 0, 0)
+        elif command == "strafe_right": self._set_dirs(0, 0, 1, 1)
+        
+        self.current_command = command
+
+    def _set_dirs(self, fl, fr, bl, br):
+        self.pi.write(self.pins["fl"]["dir"], fl)
+        self.pi.write(self.pins["fr"]["dir"], fr)
+        self.pi.write(self.pins["bl"]["dir"], bl)
+        self.pi.write(self.pins["br"]["dir"], br)
+
+    def _apply_frequency(self, freq):
+        for key in self.motor_keys:
+            pin = self.pins[key]["step"]
+            if freq > 0:
+                self.pi.set_PWM_frequency(pin, freq)
+                self.pi.set_PWM_dutycycle(pin, 128) # 50% duty
             else:
-                time.sleep(0.01)
+                self.pi.set_PWM_dutycycle(pin, 0)
+
+    def _ramping_loop(self):
+        """ Gradually increase/decrease frequency for smoothness """
+        accel_step = 400 
+        while self.running:
+            target = self.target_frequency if self.current_command else 0
+            if self.current_frequency != target:
+                if self.current_frequency < target:
+                    self.current_frequency = min(self.current_frequency + accel_step, target)
+                else:
+                    self.current_frequency = max(self.current_frequency - (accel_step * 2), target)
+                self._apply_frequency(self.current_frequency)
+            time.sleep(0.02)
 
     def cleanup(self):
+        self.running = False
+        self._apply_frequency(0)
         self.deactivate()
         if hasattr(self, 'pi'):
             self.pi.stop()
