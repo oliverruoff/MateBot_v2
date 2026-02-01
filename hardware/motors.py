@@ -13,6 +13,7 @@ class RobotMover:
             
             self.pins = self.config["motors"]
             self.delay = float(self.config["robot"]["speed_delay"])
+            self.active_low = self.pins.get("active_low", False)
             self.current_command = None
             self.lock = threading.Lock()
             
@@ -30,7 +31,6 @@ class RobotMover:
                 self.pi.set_mode(self.pins[key]["step"], pigpio.OUTPUT)
                 self.pi.write(self.pins[key]["step"], 0)
                 
-            # Enable motors (DRV8825 Sleep Pin HIGH = Awake)
             self.activate()
             
             self.thread = threading.Thread(target=self._loop, daemon=True)
@@ -42,14 +42,15 @@ class RobotMover:
             raise
 
     def activate(self):
-        # Many high-power drivers use Active LOW for ENA pin.
-        self.pi.write(self.pins["sleep_pin"], 1)
-        print("RobotMover: Motors ACTIVE (Sleep Pin HIGH)", file=sys.stderr)
+        state = 0 if self.active_low else 1
+        self.pi.write(self.pins["sleep_pin"], state)
+        print(f"RobotMover: Motors ENABLED (Sleep Pin {self.pins['sleep_pin']} = {state})", file=sys.stderr)
         time.sleep(0.5)
 
     def deactivate(self):
-        self.pi.write(self.pins["sleep_pin"], 0)
-        print("RobotMover: Motors SLEEP (Sleep Pin LOW)", file=sys.stderr)
+        state = 1 if self.active_low else 0
+        self.pi.write(self.pins["sleep_pin"], state)
+        print(f"RobotMover: Motors DISABLED (Sleep Pin {self.pins['sleep_pin']} = {state})", file=sys.stderr)
 
     def set_delay(self, new_delay):
         with self.lock:
@@ -60,20 +61,18 @@ class RobotMover:
             self.current_command = command
 
     def _step_all(self, fl_dir, fr_dir, bl_dir, br_dir):
-        # Set directions
         self.pi.write(self.pins["fl"]["dir"], fl_dir)
         self.pi.write(self.pins["fr"]["dir"], fr_dir)
         self.pi.write(self.pins["bl"]["dir"], bl_dir)
         self.pi.write(self.pins["br"]["dir"], br_dir)
         
-        # Settle time for DIR pin
         time.sleep(0.00001) 
         
-        # Trigger pulses simultaneously (20us pulse for big drivers)
-        self.pi.gpio_trigger(self.pins["fl"]["step"], 20, 1)
-        self.pi.gpio_trigger(self.pins["fr"]["step"], 20, 1)
-        self.pi.gpio_trigger(self.pins["bl"]["step"], 20, 1)
-        self.pi.gpio_trigger(self.pins["br"]["step"], 20, 1)
+        # Increased pulse width to 30us for reliability
+        self.pi.gpio_trigger(self.pins["fl"]["step"], 30, 1)
+        self.pi.gpio_trigger(self.pins["fr"]["step"], 30, 1)
+        self.pi.gpio_trigger(self.pins["bl"]["step"], 30, 1)
+        self.pi.gpio_trigger(self.pins["br"]["step"], 30, 1)
 
     def _loop(self):
         while True:
@@ -82,19 +81,12 @@ class RobotMover:
                 delay = self.delay
             
             if cmd:
-                if cmd == "forward":
-                    self._step_all(0, 1, 0, 1)
-                elif cmd == "backward":
-                    self._step_all(1, 0, 1, 0)
-                elif cmd == "left":
-                    self._step_all(1, 1, 1, 1)
-                elif cmd == "right":
-                    self._step_all(0, 0, 0, 0)
-                elif cmd == "strafe_left":
-                    self._step_all(1, 1, 0, 0)
-                elif cmd == "strafe_right":
-                    self._step_all(0, 0, 1, 1)
-                
+                if cmd == "forward": self._step_all(0, 1, 0, 1)
+                elif cmd == "backward": self._step_all(1, 0, 1, 0)
+                elif cmd == "left": self._step_all(1, 1, 1, 1)
+                elif cmd == "right": self._step_all(0, 0, 0, 0)
+                elif cmd == "strafe_left": self._step_all(1, 1, 0, 0)
+                elif cmd == "strafe_right": self._step_all(0, 0, 1, 1)
                 time.sleep(delay)
             else:
                 time.sleep(0.01)

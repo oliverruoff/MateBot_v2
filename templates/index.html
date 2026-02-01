@@ -15,6 +15,22 @@
             <div class="overlay">LIVE FEED</div>
         </div>
 
+        <div class="settings">
+            <div class="control-group">
+                <label for="speedSelect">Geschwindigkeit:</label>
+                <select id="speedSelect" onchange="updateSpeed()">
+                    <option value="0.005">Langsam (200 Hz)</option>
+                    <option value="0.001">Mittel (1000 Hz)</option>
+                    <option value="0.0005" selected>Schnell (2000 Hz)</option>
+                    <option value="0.00025">Turbo (4000 Hz)</option>
+                    <option value="0.0001">Extreme (10000 Hz)</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <button onclick="toggleLogic()" class="btn-toggle">Motor Logic umschalten (HIGH/LOW)</button>
+            </div>
+        </div>
+
         <div class="controls-grid">
             <button class="btn strafe" onmousedown="sendCommand('strafe_left')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('strafe_left')" ontouchend="sendCommand('stop')">⟵ Slide</button>
             <button class="btn forward" onmousedown="sendCommand('forward')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('forward')" ontouchend="sendCommand('stop')">▲</button>
