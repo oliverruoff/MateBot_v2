@@ -1,0 +1,12 @@
+# Minimal requirements for motor testing only
+# Works with Python 3.13
+
+# Hardware control
+RPi.GPIO==0.7.1
+pigpio==1.78
+
+# Configuration
+PyYAML>=6.0.1
+
+# Logging
+loguru>=0.7.2

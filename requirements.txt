@@ -1,5 +1,5 @@
 # MateBot v2 - SLAM Robot Requirements
-# Using compatible release specifiers for Python 3.13+ compatibility
+# Using compatible release specifiers for Python 3.12+ compatibility
 
 # Core Dependencies
 fastapi>=0.104.1
@@ -18,22 +18,22 @@ picamera2>=0.3.16
 
 # Computer Vision & Image Processing
 opencv-python>=4.8.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 scipy>=1.11.0
 Pillow>=10.0.0
 
-# SLAM & Robotics
+# SLAM & Robotics (optional - only needed for SLAM features)
 scikit-image>=0.22.0
 filterpy>=1.4.5
 
-# LiDAR Drivers
-rplidar-roboticia>=1.0.2
+# LiDAR Drivers (optional - only needed when using LiDAR)
+rplidar-roboticia>=0.9.5
 
-# Path Planning & Navigation
+# Path Planning & Navigation (optional - only needed for navigation)
 networkx>=3.2.0
 shapely>=2.0.2
 
-# Data Storage
+# Data Storage (optional - only needed for location/task storage)
 SQLAlchemy>=2.0.23
 aiosqlite>=0.19.0
 
