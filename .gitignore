@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/*.log
+logs/**/*.log
+*.log
+
+# Data files
+data/locations.db
+data/**/*.db
+maps/*.map
+maps/*.png
+
+# Temporary files
+.DS_Store
+Thumbs.db
+
+# Config overrides (keep example, ignore local)
+config/config.local.yaml
+
+# Session data
+logs/sessions/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.env.local

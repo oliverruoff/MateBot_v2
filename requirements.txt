@@ -1,5 +1,53 @@
-flask
-opencv-python
-RPi.GPIO
-toml
-picamera2
+# MateBot v2 - SLAM Robot Requirements
+
+# Core Dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+websockets==12.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Hardware Interfaces
+RPi.GPIO==0.7.1
+pigpio==1.78  # Hardware PWM for stepper motors
+smbus2==0.4.3  # I2C for IMU
+pyserial==3.5  # Serial for LiDAR
+picamera2==0.3.16
+
+# Computer Vision & Image Processing
+opencv-python==4.8.1.78
+numpy==1.24.3
+scipy==1.11.4
+Pillow==10.1.0
+
+# SLAM & Robotics
+scikit-image==0.22.0  # Image processing for SLAM
+filterpy==1.4.5  # Kalman and particle filters
+
+# LiDAR Drivers
+rplidar-roboticia==1.0.2  # RPLIDAR support
+
+# Path Planning & Navigation
+networkx==3.2.1  # Graph algorithms for path planning
+shapely==2.0.2  # Geometric operations
+
+# Data Storage
+SQLAlchemy==2.0.23
+aiosqlite==0.19.0
+
+# Configuration
+PyYAML==6.0.1
+python-dotenv==1.0.0
+
+# Logging & Monitoring
+loguru==0.7.2
+
+# Utilities
+python-dateutil==2.8.2
+aiofiles==23.2.1
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0

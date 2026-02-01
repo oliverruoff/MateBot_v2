@@ -1,0 +1,142 @@
+robot:
+  name: "MateBot"
+  wheel_base: 0.25  # meters between wheels (front-to-back and left-to-right)
+  wheel_radius: 0.05  # meters
+  max_linear_speed: 0.5  # m/s
+  max_angular_speed: 1.0  # rad/s
+  robot_radius: 0.20  # meters (for collision checking)
+
+hardware:
+  motors:
+    front_left:
+      dir_pin: 11
+      step_pin: 9
+      direction_multiplier: 1  # 1 or -1 for direction calibration
+    front_right:
+      dir_pin: 10
+      step_pin: 22
+      direction_multiplier: 1
+    back_left:
+      dir_pin: 19
+      step_pin: 13
+      direction_multiplier: 1
+    back_right:
+      dir_pin: 6
+      step_pin: 5
+      direction_multiplier: 1
+    sleep_pin: 26
+    steps_per_rev: 200
+    microsteps: 16
+    pulse_width_us: 1  # microseconds
+    max_speed_steps_per_sec: 1000
+    acceleration_steps_per_sec2: 500
+
+  lidar:
+    enabled: true
+    type: "rplidar_a1"  # Options: rplidar_a1, rplidar_a2, ydlidar_x4
+    port: "/dev/ttyUSB0"
+    baudrate: 115200
+    scan_frequency: 10  # Hz
+    min_distance: 0.15  # meters (ignore closer obstacles)
+    max_distance: 12.0  # meters
+    angle_offset: 0.0  # radians (calibration offset)
+
+  imu:
+    enabled: true
+    type: "mpu6050"  # Options: mpu6050, bno055
+    i2c_address: 0x68
+    i2c_bus: 1
+    update_rate: 50  # Hz
+    gyro_calibration_samples: 1000
+    complementary_filter_alpha: 0.98  # For orientation fusion
+
+  camera:
+    resolution: [640, 480]
+    framerate: 30
+    format: "RGB888"
+    flip_horizontal: false
+    flip_vertical: false
+    rotation: 0  # 0, 90, 180, 270
+
+slam:
+  enabled: true
+  map_resolution: 0.05  # meters per cell
+  map_size: [400, 400]  # cells (20m x 20m map)
+  particle_count: 500
+  update_frequency: 10  # Hz
+  
+  # Localization parameters
+  motion_noise:
+    linear: 0.02  # meters
+    angular: 0.05  # radians
+  measurement_noise: 0.1  # meters
+  
+  # Mapping parameters
+  occupancy_threshold_free: 0.3
+  occupancy_threshold_occupied: 0.7
+  map_update_rate: 1.0  # Hz
+  
+  # Loop closure
+  loop_closure_enabled: true
+  loop_closure_distance_threshold: 1.0  # meters
+  loop_closure_angle_threshold: 0.5  # radians
+
+navigation:
+  goal_tolerance_position: 0.15  # meters
+  goal_tolerance_angle: 0.2  # radians
+  path_resolution: 0.1  # meters between waypoints
+  lookahead_distance: 0.5  # meters for pure pursuit
+  lookahead_gain: 0.3  # adaptive lookahead
+  
+  # Obstacle avoidance
+  obstacle_inflation_radius: 0.3  # meters
+  dynamic_obstacle_threshold: 0.1  # meters/s
+  
+  # Path planning
+  planner_type: "astar"  # Options: astar, rrt, rrt_star
+  planning_timeout: 5.0  # seconds
+  replan_threshold: 0.5  # meters (replan if deviation exceeds this)
+  
+  # Controller parameters
+  max_linear_velocity: 0.3  # m/s
+  max_angular_velocity: 0.8  # rad/s
+  pid_linear:
+    kp: 1.0
+    ki: 0.0
+    kd: 0.1
+  pid_angular:
+    kp: 2.0
+    ki: 0.0
+    kd: 0.2
+
+safety:
+  emergency_stop_deceleration: 2.0  # m/s^2
+  watchdog_timeout: 1.0  # seconds (stop if no command)
+  min_battery_voltage: 10.5  # volts
+  max_tilt_angle: 0.5  # radians (emergency stop if exceeded)
+  collision_stop_distance: 0.2  # meters
+  stuck_detection_timeout: 5.0  # seconds
+  stuck_detection_distance: 0.05  # meters
+
+web:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins: ["*"]
+  video_quality: 80  # JPEG quality 0-100
+  video_framerate: 20  # Hz (lower than camera for bandwidth)
+  telemetry_rate: 10  # Hz
+  map_update_rate: 2  # Hz (send map updates to clients)
+  websocket_ping_interval: 30  # seconds
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_to_file: true
+  log_file: "logs/matebot.log"
+  max_log_size_mb: 50
+  backup_count: 5
+  
+storage:
+  maps_directory: "maps"
+  locations_database: "data/locations.db"
+  tasks_directory: "data/tasks"
+  session_logs: "logs/sessions"
