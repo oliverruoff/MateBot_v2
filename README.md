@@ -173,17 +173,137 @@ sudo usermod -a -G gpio $USER
 
 ## Usage
 
-### Running the Robot
+### Running the Robot Server on Raspberry Pi
+
+**Current Implementation**: The project currently uses a Flask-based web server (`app.py`) for robot control. The FastAPI implementation is planned for future releases.
+
+#### Step-by-Step Server Startup
+
+1. **SSH into the Raspberry Pi**
+   ```bash
+   ssh matebot@matebot.local
+   # Default password: (contact system administrator)
+   ```
+
+2. **Navigate to Project Directory**
+   ```bash
+   cd ~/develop/MateBot_v2
+   ```
+
+3. **Activate Virtual Environment**
+   ```bash
+   source venv/bin/activate
+   ```
+
+4. **Start the pigpio Daemon** (Required for hardware PWM)
+   ```bash
+   sudo pigpiod
+   ```
+   
+   Check if pigpio is running:
+   ```bash
+   ps aux | grep pigpiod
+   ```
+
+5. **Run the Flask Web Server**
+   ```bash
+   python app.py
+   ```
+   
+   The server will start on port 5000 and display:
+   ```
+   RobotMover: Initializing with config.toml
+   RobotMover: Hardware PWM with Ramping initialized.
+   * Serving Flask app 'app'
+   * Running on http://0.0.0.0:5000
+   ```
+
+6. **Access the Web Interface**
+   
+   Open a web browser and navigate to:
+   - From local network: `http://matebot.local:5000`
+   - Or using IP: `http://192.168.1.x:5000` (replace x with actual IP)
+   
+   You can find the Raspberry Pi's IP address with:
+   ```bash
+   hostname -I
+   ```
+
+#### Running Server in Background
+
+To keep the server running after disconnecting from SSH:
 
 ```bash
-# Activate virtual environment
+# Using nohup
+nohup python app.py > app_output.log 2>&1 &
+
+# Check if running
+ps aux | grep "python app.py"
+
+# Stop the background server
+pkill -f "python app.py"
+```
+
+Or use `tmux` or `screen` for better session management:
+
+```bash
+# Install tmux (if not installed)
+sudo apt-get install tmux
+
+# Start a new tmux session
+tmux new -s matebot
+
+# Run the server
+cd ~/develop/MateBot_v2
 source venv/bin/activate
+sudo pigpiod
+python app.py
 
-# Start the robot server
-python -m matebot.api.app
+# Detach from session: Press Ctrl+B, then D
+# Reattach later: tmux attach -t matebot
+```
 
-# Access web interface
-# Open browser to: http://raspberry-pi-ip:8000
+#### Checking Server Status
+
+```bash
+# Check if Flask app is running
+sudo lsof -i :5000
+
+# View recent logs
+tail -f ~/develop/MateBot_v2/app.log
+
+# Check IMU telemetry
+curl http://localhost:5000/telemetry
+```
+
+#### Troubleshooting Server Issues
+
+**Port already in use:**
+```bash
+# Find process using port 5000
+sudo lsof -i :5000
+
+# Kill the process (replace PID with actual process ID)
+kill -9 PID
+```
+
+**pigpio not running:**
+```bash
+sudo pigpiod
+# If it fails, check if already running or restart
+sudo killall pigpiod
+sudo pigpiod
+```
+
+**Permission denied errors:**
+```bash
+# Ensure user is in correct groups
+groups matebot
+# Should include: gpio, i2c, dialout
+
+# If not, add and reboot
+sudo usermod -a -G gpio,i2c,dialout matebot
+sudo reboot
 ```
 
 ### Operating Modes
