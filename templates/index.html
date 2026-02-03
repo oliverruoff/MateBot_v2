@@ -3,12 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roboter Cockpit</title>
+    <title>MateBot v2 - SLAM Cockpit</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
-        <h1>MARS ROVER CONTROL</h1>
+        <h1>ROBOT CONTROL</h1>
+        
+        <div class="keyboard-hint">
+            ⌨️ Keyboard: WASD / Arrows + Q/E for strafe
+        </div>
+        
+        <!-- SLAM Exploration Panel -->
+        <div class="mapping-panel">
+            <h2>🗺️ Manual Map Building</h2>
+            <div class="mapping-controls">
+                <button id="startMappingBtn" onclick="startMapping()" class="btn-mapping">
+                    🚀 UPDATE MAP
+                </button>
+                <button id="resetMapBtn" onclick="resetMap()" class="btn-reset-map">
+                    🗑️ RESET MAP
+                </button>
+                <button id="exportMapBtn" onclick="exportMap()" class="btn-export">
+                    📸 EXPORT PNG
+                </button>
+                <div id="mappingStatus" class="mapping-status">
+                    ⚪ Standby
+                </div>
+            </div>
+
+            <div class="map-stats-bar">
+                <span id="chunks-loaded">Chunks: 0</span>
+                <span id="coverage-area">Area: 0 m²</span>
+                <span id="memory-usage">Memory: 0 MB</span>
+                <label class="toggle-label">
+                    <input type="checkbox" id="showChunksToggle" onchange="toggleChunks()"> Show Chunks
+                </label>
+            </div>
+
+            <canvas id="mapCanvas" width="400" height="400"></canvas>
+            <div class="map-legend">
+                <span><span style="color: #444;">⬛</span> Unknown</span>
+                <span><span style="color: #fff;">⬜</span> Free</span>
+                <span><span style="color: #a00;">⬛</span> Occupied</span>
+                <span><span style="color: #0f0;">🟢</span> Robot</span>
+            </div>
+        </div>
         
         <div class="camera-feed">
             <img src="{{ url_for('video_feed') }}" alt="Live Kamera">
@@ -31,35 +71,47 @@
             </div>
         </div>
 
-        <div class="telemetry">
-            <h2>IMU Telemetry</h2>
-            <div class="imu-grid">
-                <div class="imu-card">
-                    <h3>Acceleration (g)</h3>
-                    <div class="bar-container"><div id="acc-x" class="bar">X: 0.00</div></div>
-                    <div class="bar-container"><div id="acc-y" class="bar">Y: 0.00</div></div>
-                    <div class="bar-container"><div id="acc-z" class="bar">Z: 0.00</div></div>
+        <div class="sensor-grid">
+            <div class="telemetry">
+                <h2>IMU Telemetry</h2>
+                <div class="imu-grid">
+                    <div class="imu-card">
+                        <h3>Acceleration (g)</h3>
+                        <div class="bar-container"><div id="acc-x" class="bar">X: 0.00</div></div>
+                        <div class="bar-container"><div id="acc-y" class="bar">Y: 0.00</div></div>
+                        <div class="bar-container"><div id="acc-z" class="bar">Z: 0.00</div></div>
+                    </div>
+                    <div class="imu-card">
+                        <h3>Gyroscope (°/s)</h3>
+                        <div id="gyro-x">X: 0.00</div>
+                        <div id="gyro-y">Y: 0.00</div>
+                        <div id="gyro-z">Z: 0.00</div>
+                    </div>
                 </div>
-                <div class="imu-card">
-                    <h3>Gyroscope (°/s)</h3>
-                    <div id="gyro-x">X: 0.00</div>
-                    <div id="gyro-y">Y: 0.00</div>
-                    <div id="gyro-z">Z: 0.00</div>
+            </div>
+
+            <div class="lidar-panel">
+                <h2>LiDAR Sensor</h2>
+                <canvas id="lidarCanvas" width="300" height="300"></canvas>
+                <div class="lidar-data">
+                    <div id="lidar-distance">Distance: -- cm</div>
+                    <div id="lidar-strength">Strength: --</div>
+                    <div id="lidar-status" class="status-indicator">●</div>
                 </div>
             </div>
         </div>
 
         <div class="controls-grid">
-            <button class="btn strafe" onmousedown="sendCommand('strafe_left')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('strafe_left')" ontouchend="sendCommand('stop')">⟵ Slide</button>
-            <button class="btn forward" onmousedown="sendCommand('forward')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('forward')" ontouchend="sendCommand('stop')">▲</button>
-            <button class="btn strafe" onmousedown="sendCommand('strafe_right')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('strafe_right')" ontouchend="sendCommand('stop')">Slide ⟶</button>
+            <button class="btn strafe" onmousedown="sendCommand('strafe_left')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('strafe_left')" ontouchend="sendCommand('stop')">⟵ Slide (Q)</button>
+            <button class="btn forward" onmousedown="sendCommand('forward')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('forward')" ontouchend="sendCommand('stop')">▲ (W/↑)</button>
+            <button class="btn strafe" onmousedown="sendCommand('strafe_right')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('strafe_right')" ontouchend="sendCommand('stop')">Slide ⟶ (E)</button>
             
-            <button class="btn left" onmousedown="sendCommand('left')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('left')" ontouchend="sendCommand('stop')">◀</button>
+            <button class="btn left" onmousedown="sendCommand('left')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('left')" ontouchend="sendCommand('stop')">◀ (A/←)</button>
             <button class="btn center" disabled>STOP</button>
-            <button class="btn right" onmousedown="sendCommand('right')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('right')" ontouchend="sendCommand('stop')">▶</button>
+            <button class="btn right" onmousedown="sendCommand('right')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('right')" ontouchend="sendCommand('stop')">▶ (D/→)</button>
             
             <div class="spacer"></div>
-            <button class="btn backward" onmousedown="sendCommand('backward')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('backward')" ontouchend="sendCommand('stop')">▼</button>
+            <button class="btn backward" onmousedown="sendCommand('backward')" onmouseup="sendCommand('stop')" ontouchstart="sendCommand('backward')" ontouchend="sendCommand('stop')">▼ (S/↓)</button>
             <div class="spacer"></div>
         </div>
         
