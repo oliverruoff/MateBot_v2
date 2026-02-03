@@ -4,7 +4,7 @@ import sys
 def run_commands():
     hostname = 'matebot.local'
     username = 'matebot'
-    password = 'm4t3b0t!-'
+    password = '' # ask user for it!
     
     # Check the last 500 lines but skip the CRC mismatches to see what else is there
     commands = [
