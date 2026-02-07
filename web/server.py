@@ -76,8 +76,8 @@ async def websocket_endpoint(websocket: WebSocket):
 # Serve the UI at `/` from web/static/html, and assets from `/static/...`
 base_static_dir = os.path.join(os.path.dirname(__file__), "static")
 html_dir = os.path.join(base_static_dir, "html")
-app.mount("/", StaticFiles(directory=html_dir, html=True), name="html")
 app.mount("/static", StaticFiles(directory=base_static_dir, html=False), name="static")
+app.mount("/", StaticFiles(directory=html_dir, html=True), name="html")
 
 def run_server(q_motors, q_command):
     global queue_motors, queue_command
