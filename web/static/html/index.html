@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MateBot v2 Control Panel</title>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>MateBot v2</h1>
+            <div id="status">Disconnected</div>
+        </header>
+
+        <main>
+            <div class="map-container">
+                <canvas id="mapCanvas"></canvas>
+            </div>
+
+            <div class="controls">
+                <div id="joystickZone"></div>
+                
+                <div class="poi-manager">
+                    <h3>Locations</h3>
+                    <ul id="poiList"></ul>
+                    <button id="savePoiBtn">Save Current Location</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/joystick.js"></script>
+    <script src="/js/map_render.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

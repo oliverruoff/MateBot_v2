@@ -1,0 +1,100 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #1a1a1a;
+    color: #eee;
+    margin: 0;
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+header {
+    background: #333;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #444;
+}
+
+main {
+    flex: 1;
+    display: flex;
+    padding: 20px;
+    gap: 20px;
+}
+
+.map-container {
+    flex: 2;
+    background: #000;
+    border: 1px solid #555;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#mapCanvas {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.controls {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+#joystickZone {
+    width: 200px;
+    height: 200px;
+    background: #333;
+    border-radius: 50%;
+    position: relative;
+    margin: 0 auto;
+}
+
+.poi-manager {
+    background: #222;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #444;
+}
+
+.poi-manager ul {
+    list-style: none;
+    padding: 0;
+}
+
+.poi-manager li {
+    padding: 8px;
+    background: #333;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    cursor: pointer;
+}
+
+.poi-manager li:hover {
+    background: #444;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0056b3;
+}
