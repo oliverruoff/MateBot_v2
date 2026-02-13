@@ -42,8 +42,11 @@ function connect() {
 
 function sendMotion(vx, vy, omega) {
     if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log("Sending Motion:", {vx, vy, omega});
-        ws.send(JSON.stringify({ joystick: { vx, vy, omega } }));
+        console.log("Sending Motion:", {vx, vy, omega, freq: currentFrequency});
+        ws.send(JSON.stringify({ 
+            joystick: { vx, vy, omega },
+            frequency: currentFrequency
+        }));
     }
 }
 
@@ -85,5 +88,33 @@ function processKeys() {
 const joystick = new Joystick('joystickZone', (vx, vy, omega) => {
     sendMotion(vx, vy, omega);
 });
+
+// Reset map button handler
+if (resetMapBtn) {
+    resetMapBtn.addEventListener('click', async () => {
+        if (confirm('Reset the map? This will clear all scan data.')) {
+            try {
+                const res = await fetch('/api/reset_map', { method: 'POST' });
+                const data = await res.json();
+                console.log("Map reset:", data);
+                alert('Map reset successfully!');
+            } catch (e) {
+                console.error("Reset map error:", e);
+                alert('Failed to reset map: ' + e.message);
+            }
+        }
+    });
+}
+
+// Frequency selector handler  
+if (freqSelect) {
+    freqSelect.addEventListener('change', (e) => {
+        currentFrequency = parseInt(e.target.value);
+        if (currentFreqEl) {
+            currentFreqEl.textContent = currentFrequency;
+        }
+        console.log("Frequency changed to:", currentFrequency);
+    });
+}
 
 connect();

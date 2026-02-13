@@ -36,10 +36,14 @@ def process_a_motion(queue_motors):
             # Check queue
             while not queue_motors.empty():
                 cmd = queue_motors.get()
-                current_vx, current_vy, current_omega = cmd
+                if len(cmd) >= 4:
+                    current_vx, current_vy, current_omega, freq = cmd
+                    motors.test_frequency = freq  # Set test frequency
+                else:
+                    current_vx, current_vy, current_omega = cmd[:3]
                 last_command_time = time.time()
                 motors.set_enabled(True)
-                log_debug(f"MOTION: CMD {current_vx}, {current_omega}")
+                log_debug(f"MOTION: CMD {current_vx}, {current_omega}, freq={motors.test_frequency}")
             
             # Timeout
             if time.time() - last_command_time > 1.0:

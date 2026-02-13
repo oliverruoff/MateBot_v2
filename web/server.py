@@ -19,6 +19,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+@app.post("/api/reset_map")
+async def reset_map():
+    """Reset the SLAM map"""
+    try:
+        import numpy as np
+        shm_map = MapSharedMemory(create=False)
+        empty_map = np.zeros((config.MAP_SIZE_PIXELS, config.MAP_SIZE_PIXELS), dtype=np.uint8)
+        shm_map.update_map(empty_map)
+        return {"status": "success", "message": "Map reset"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -32,9 +44,10 @@ async def websocket_endpoint(websocket: WebSocket):
             if "joystick" in data:
                 j = data["joystick"]
                 vx, vy, omega = j.get("vx", 0), j.get("vy", 0), j.get("omega", 0)
-                print(f"WS DEBUG: Joystick vx={vx}, omega={omega}")
+                freq = data.get("frequency", 2000)
+                print(f"WS DEBUG: Joystick vx={vx}, omega={omega}, freq={freq}")
                 if QUEUES["motors"]:
-                    QUEUES["motors"].put((vx, vy, omega))
+                    QUEUES["motors"].put((vx, vy, omega, freq))
             
             if data.get("request") == "map":
                 map_array = shm_map.get_map()

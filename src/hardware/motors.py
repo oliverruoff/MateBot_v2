@@ -1,4 +1,5 @@
 import time
+import threading
 import config
 
 try:
@@ -11,11 +12,12 @@ class MotorController:
     def __init__(self):
         self.simulation = not PIGPIO_AVAILABLE or config.SIMULATION_MODE
         
-        # Ramping state
-        self.current_speeds = [0.0, 0.0, 0.0, 0.0] # FL, FR, BL, BR
-        self.target_speeds = [0.0, 0.0, 0.0, 0.0]
-        self.accel_limit = 20000.0 # Match main branch's aggressiveness
-        self.dt = 1.0 / config.MOTION_CYCLE_HZ
+        # Use single frequency for all motors (like main branch)
+        self.target_frequency = 0
+        self.current_frequency = 0
+        self.accel_step = 400  # Hz per step
+        self.max_frequency = 8000
+        self.test_frequency = None  # Allow override from web UI
         
         if not self.simulation:
             self.pi = pigpio.pi()
@@ -23,68 +25,114 @@ class MotorController:
                 self.simulation = True
         
         if not self.simulation:
-            self.pins = {
-                'sleep': config.MOTOR_SLEEP_PIN,
-                'fl_step': config.FRONT_LEFT_STEP, 'fl_dir': config.FRONT_LEFT_DIR,
-                'fr_step': config.FRONT_RIGHT_STEP, 'fr_dir': config.FRONT_RIGHT_DIR,
-                'bl_step': config.BACK_LEFT_STEP, 'bl_dir': config.BACK_LEFT_DIR,
-                'br_step': config.BACK_RIGHT_STEP, 'br_dir': config.BACK_RIGHT_DIR,
-            }
-            for pin in self.pins.values():
+            # Setup all pins
+            self.pi.set_mode(config.MOTOR_SLEEP_PIN, pigpio.OUTPUT)
+            for pin in [config.FRONT_LEFT_DIR, config.FRONT_RIGHT_DIR,
+                       config.BACK_LEFT_DIR, config.BACK_RIGHT_DIR]:
                 self.pi.set_mode(pin, pigpio.OUTPUT)
             
-            self.set_enabled(False) 
+            for pin in [config.FRONT_LEFT_STEP, config.FRONT_RIGHT_STEP,
+                       config.BACK_LEFT_STEP, config.BACK_RIGHT_STEP]:
+                self.pi.set_mode(pin, pigpio.OUTPUT)
+                self.pi.set_PWM_dutycycle(pin, 0)
+            
+            # Enable motors
+            self._enable()
+            
+            # Start ramping thread
+            self.running = True
+            self.ramp_thread = threading.Thread(target=self._ramping_loop, daemon=True)
+            self.ramp_thread.start()
         else:
             print("MotorController running in SIMULATION mode.")
 
-    def set_enabled(self, enabled):
-        if self.simulation: return
-        # Active-Low: 0 = Enable, 1 = Sleep
-        state = pigpio.LOW if enabled else pigpio.HIGH
-        self.pi.write(config.MOTOR_SLEEP_PIN, state)
-
-    def update_ramping(self):
-        """Called at MOTION_CYCLE_HZ to update current speeds towards targets"""
-        for i in range(4):
-            diff = self.target_speeds[i] - self.current_speeds[i]
-            max_change = self.accel_limit * self.dt
-            
-            if abs(diff) < max_change:
-                self.current_speeds[i] = self.target_speeds[i]
-            else:
-                self.current_speeds[i] += max_change if diff > 0 else -max_change
-                
+    def _enable(self):
         if not self.simulation:
-            self._apply_hw_speeds()
+            # Active low: 0 = enabled
+            self.pi.write(config.MOTOR_SLEEP_PIN, pigpio.LOW)
+            time.sleep(0.1)
+
+    def _disable(self):
+        if not self.simulation:
+            self.pi.write(config.MOTOR_SLEEP_PIN, pigpio.HIGH)
+
+    def _set_dirs(self, fl, fr, bl, br):
+        """Set direction pins (0 or 1)"""
+        if not self.simulation:
+            # Right side inverted
+            self.pi.write(config.FRONT_LEFT_DIR, fl)
+            self.pi.write(config.FRONT_RIGHT_DIR, 1-fr)  # Inverted
+            self.pi.write(config.BACK_LEFT_DIR, bl)
+            self.pi.write(config.BACK_RIGHT_DIR, 1-br)   # Inverted
+
+    def _apply_frequency(self, freq):
+        """Apply same frequency to all motors"""
+        if self.simulation:
+            return
+        
+        for pin in [config.FRONT_LEFT_STEP, config.FRONT_RIGHT_STEP,
+                   config.BACK_LEFT_STEP, config.BACK_RIGHT_STEP]:
+            if freq > 0:
+                self.pi.set_PWM_frequency(pin, int(freq))
+                self.pi.set_PWM_dutycycle(pin, 128)
+            else:
+                self.pi.set_PWM_dutycycle(pin, 0)
+
+    def _ramping_loop(self):
+        """Background thread for smooth ramping"""
+        while self.running:
+            if self.current_frequency != self.target_frequency:
+                if self.current_frequency < self.target_frequency:
+                    self.current_frequency = min(self.current_frequency + self.accel_step, 
+                                                self.target_frequency)
+                else:
+                    self.current_frequency = max(self.current_frequency - (self.accel_step * 2), 
+                                                self.target_frequency)
+                self._apply_frequency(self.current_frequency)
+            time.sleep(0.02)  # 50Hz update rate
 
     def set_speeds(self, fl, fr, bl, br):
-        """Set target speeds in pulses per second (Hz)"""
-        self.target_speeds = [fl, fr, bl, br]
-
-    def _apply_hw_speeds(self):
-        # Left side: speed > 0 is Forward (LOW)
-        # Right side: speed > 0 is Forward (HIGH)
-        self._set_motor_hw(config.FRONT_LEFT_STEP, config.FRONT_LEFT_DIR, self.current_speeds[0], invert=False)
-        self._set_motor_hw(config.FRONT_RIGHT_STEP, config.FRONT_RIGHT_DIR, self.current_speeds[1], invert=True)
-        self._set_motor_hw(config.BACK_LEFT_STEP, config.BACK_LEFT_DIR, self.current_speeds[2], invert=False)
-        self._set_motor_hw(config.BACK_RIGHT_STEP, config.BACK_RIGHT_DIR, self.current_speeds[3], invert=True)
-
-    def _set_motor_hw(self, step_pin, dir_pin, speed, invert=False):
-        if not invert:
-            direction = pigpio.LOW if speed >= 0 else pigpio.HIGH
+        """Set motor speeds - use max speed as frequency, set directions individually"""
+        # Find max speed
+        max_speed = max(abs(fl), abs(fr), abs(bl), abs(br))
+        
+        if max_speed < 10:
+            # Stop
+            self.target_frequency = 0
+            return
+        
+        # Calculate normalized directions (0 or 1)
+        dir_fl = 1 if fl > 0 else 0
+        dir_fr = 1 if fr > 0 else 0
+        dir_bl = 1 if bl > 0 else 0
+        dir_br = 1 if br > 0 else 0
+        
+        # Set directions
+        self._set_dirs(dir_fl, dir_fr, dir_bl, dir_br)
+        
+        # Use test frequency if set, otherwise calculate from speed
+        if self.test_frequency is not None:
+            self.target_frequency = self.test_frequency
         else:
-            direction = pigpio.HIGH if speed >= 0 else pigpio.LOW
-            
-        self.pi.write(dir_pin, direction)
-        abs_speed = int(abs(speed))
-        if abs_speed > 20: 
-            self.pi.set_PWM_frequency(step_pin, abs_speed)
-            self.pi.set_PWM_dutycycle(step_pin, 128)
+            target_freq = min(max_speed, self.max_frequency)
+            self.target_frequency = max(target_freq, 100)
+
+    def set_enabled(self, enabled):
+        if enabled:
+            self._enable()
         else:
-            self.pi.set_PWM_dutycycle(step_pin, 0)
+            self._disable()
+
+    def update_ramping(self):
+        """Ramping handled in background thread"""
+        pass
 
     def stop(self):
-        self.target_speeds = [0.0, 0.0, 0.0, 0.0]
+        self.target_frequency = 0
+        self.current_frequency = 0
+        self.test_frequency = None
+        self._apply_frequency(0)
+        self._disable()
 
 class MecanumKinematics:
     def __init__(self):
