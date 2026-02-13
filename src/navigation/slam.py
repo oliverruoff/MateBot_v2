@@ -46,3 +46,9 @@ class SlamProcessor:
 
     def get_map(self):
         return self.map_data
+
+    def reset_map(self):
+        """Clear the occupancy grid map data"""
+        self.map_data.fill(0)
+        # Reset position to center (optional, but usually desired on reset)
+        self.x, self.y, self.theta = self.map_size/2 * self.resolution, self.map_size/2 * self.resolution, 0.0

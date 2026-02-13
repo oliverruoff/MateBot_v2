@@ -23,10 +23,16 @@ app = FastAPI(lifespan=lifespan)
 async def reset_map():
     """Reset the SLAM map"""
     try:
+        # 1. Reset Shared Memory (immediate UI feedback)
         import numpy as np
         shm_map = MapSharedMemory(create=False)
         empty_map = np.zeros((config.MAP_SIZE_PIXELS, config.MAP_SIZE_PIXELS), dtype=np.uint8)
         shm_map.update_map(empty_map)
+        
+        # 2. Notify Navigation Process to reset its persistent data
+        if QUEUES["command"]:
+            QUEUES["command"].put({"action": "reset_map"})
+            
         return {"status": "success", "message": "Map reset"}
     except Exception as e:
         return {"status": "error", "message": str(e)}

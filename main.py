@@ -74,6 +74,16 @@ def process_b_nav(queue_motors, queue_command):
         shm_map = MapSharedMemory(create=False)
         lidar.start()
         while True:
+            # Check for commands (like reset map)
+            try:
+                while not queue_command.empty():
+                    cmd = queue_command.get_nowait()
+                    if cmd.get("action") == "reset_map":
+                        log_debug("NAV: Resetting Map")
+                        slam.reset_map()
+            except Exception:
+                pass
+
             scan = lidar.get_scan()
             slam.update(scan)
             shm_map.update_map(slam.get_map())
