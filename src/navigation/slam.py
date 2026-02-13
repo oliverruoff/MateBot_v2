@@ -9,13 +9,27 @@ class SlamProcessor:
         self.map_data = np.full((self.map_size, self.map_size), 0, dtype=np.uint8)
         self.x, self.y, self.theta = self.map_size/2 * self.resolution, self.map_size/2 * self.resolution, 0.0
 
+    def apply_odometry(self, dx, dy, dtheta):
+        """Update robot pose without lidar scan"""
+        # Transform delta-pose from robot frame to world frame
+        # dx, dy is in robot frame
+        cos_th = np.cos(self.theta)
+        sin_th = np.sin(self.theta)
+        
+        world_dx = dx * cos_th - dy * sin_th
+        world_dy = dx * sin_th + dy * cos_th
+        
+        self.x += world_dx
+        self.y += world_dy
+        self.theta += dtheta
+        
+        # Ensure theta stays in [0, 2pi]
+        self.theta = self.theta % (2 * np.pi)
+
     def update(self, scan_data, odometry=None):
-        # 1. Update pose from odometry (if we had it)
+        # 1. Update pose from odometry if provided
         if odometry:
-            dx, dy, dtheta = odometry
-            self.x += dx
-            self.y += dy
-            self.theta += dtheta
+            self.apply_odometry(*odometry)
             
         # 2. Mark current area as free
         cx, cy = int(self.x / self.resolution), int(self.y / self.resolution)
