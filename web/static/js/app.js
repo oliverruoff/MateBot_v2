@@ -1,8 +1,12 @@
 const statusEl = document.getElementById('status');
 const poiListEl = document.getElementById('poiList');
 const savePoiBtn = document.getElementById('savePoiBtn');
+const resetMapBtn = document.getElementById('resetMapBtn');
+const freqSelect = document.getElementById('freqSelect');
+const currentFreqEl = document.getElementById('currentFreq');
 
 let ws;
+let currentFrequency = 2000;
 const mapRenderer = new MapRenderer('mapCanvas');
 
 function connect() {
@@ -16,7 +20,6 @@ function connect() {
         statusEl.innerText = 'Connected';
         statusEl.style.color = '#0f0';
         
-        // Map request loop
         setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ request: 'map' }));
@@ -50,14 +53,40 @@ function sendMotion(vx, vy, omega) {
     }
 }
 
-// Global key state
+// Reset map button handler
+if (resetMapBtn) {
+    resetMapBtn.addEventListener('click', async () => {
+        if (confirm('Reset the map? This will clear all scan data.')) {
+            try {
+                const res = await fetch('/api/reset_map', { method: 'POST' });
+                const data = await res.json();
+                console.log("Map reset:", data);
+                alert('Map reset successfully!');
+            } catch (e) {
+                console.error("Reset map error:", e);
+                alert('Failed to reset map: ' + e.message);
+            }
+        }
+    });
+}
+
+// Frequency selector handler
+if (freqSelect) {
+    freqSelect.addEventListener('change', (e) => {
+        currentFrequency = parseInt(e.target.value);
+        if (currentFreqEl) {
+            currentFreqEl.textContent = currentFrequency;
+        }
+        console.log("Frequency changed to:", currentFrequency);
+    });
+}
+
 const activeKeys = new Set();
 
 window.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
     if (!activeKeys.has(key)) {
         activeKeys.add(key);
-        console.log("Key Down:", key);
         processKeys();
     }
 });
@@ -65,7 +94,6 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
     const key = e.key.toLowerCase();
     activeKeys.delete(key);
-    console.log("Key Up:", key);
     processKeys();
 });
 
@@ -84,37 +112,8 @@ function processKeys() {
     sendMotion(vx, vy, omega);
 }
 
-// Joystick fallback
 const joystick = new Joystick('joystickZone', (vx, vy, omega) => {
     sendMotion(vx, vy, omega);
 });
-
-// Reset map button handler
-if (resetMapBtn) {
-    resetMapBtn.addEventListener('click', async () => {
-        if (confirm('Reset the map? This will clear all scan data.')) {
-            try {
-                const res = await fetch('/api/reset_map', { method: 'POST' });
-                const data = await res.json();
-                console.log("Map reset:", data);
-                alert('Map reset successfully!');
-            } catch (e) {
-                console.error("Reset map error:", e);
-                alert('Failed to reset map: ' + e.message);
-            }
-        }
-    });
-}
-
-// Frequency selector handler  
-if (freqSelect) {
-    freqSelect.addEventListener('change', (e) => {
-        currentFrequency = parseInt(e.target.value);
-        if (currentFreqEl) {
-            currentFreqEl.textContent = currentFrequency;
-        }
-        console.log("Frequency changed to:", currentFrequency);
-    });
-}
 
 connect();
