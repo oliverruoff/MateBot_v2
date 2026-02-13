@@ -15,20 +15,20 @@ class MapRenderer {
         for (let i = 0; i < data.length; i++) {
             const val = data[i];
             const idx = i * 4;
-            // 0=unknown (grey), 127=free (white?), 255=occupied (black)
-            // Let's adjust for visibility
-            if (val === 127) { // Unknown
-                imageData.data[idx] = 50;
-                imageData.data[idx+1] = 50;
-                imageData.data[idx+2] = 50;
-            } else if (val === 255) { // Occupied
-                imageData.data[idx] = 255;
+            
+            // 0=unknown, 127=free, 255=occupied (typical mapping values)
+            if (val === 0) { // Unknown -> Light Grey
+                imageData.data[idx] = 180;
+                imageData.data[idx+1] = 180;
+                imageData.data[idx+2] = 180;
+            } else if (val === 255) { // Occupied -> Black
+                imageData.data[idx] = 0;
                 imageData.data[idx+1] = 0;
                 imageData.data[idx+2] = 0;
-            } else { // Free
-                imageData.data[idx] = 200;
-                imageData.data[idx+1] = 200;
-                imageData.data[idx+2] = 200;
+            } else { // Free -> White
+                imageData.data[idx] = 255;
+                imageData.data[idx+1] = 255;
+                imageData.data[idx+2] = 255;
             }
             imageData.data[idx+3] = 255; // Alpha
         }

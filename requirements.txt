@@ -1,10 +1,8 @@
 fastapi
-uvicorn
+uvicorn[standard]
 numpy
 pydantic
 pathfinding
 requests
-# BreezySLAM and pigpio often require system-level installation or specific wheels
-# but adding them here for completeness of intent.
-# breezy-slam
-# pigpio
+smbus2
+pyserial

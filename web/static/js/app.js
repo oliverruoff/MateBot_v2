@@ -4,20 +4,19 @@ const savePoiBtn = document.getElementById('savePoiBtn');
 
 let ws;
 const mapRenderer = new MapRenderer('mapCanvas');
-const joystick = new Joystick('joystickZone', (vx, vy, omega) => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ joystick: { vx, vy, omega } }));
-    }
-});
 
 function connect() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    console.log("Connecting to", wsUrl);
+    ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+        console.log("WS Connected");
         statusEl.innerText = 'Connected';
         statusEl.style.color = '#0f0';
-        // Request map updates
+        
+        // Map request loop
         setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ request: 'map' }));
@@ -26,6 +25,7 @@ function connect() {
     };
 
     ws.onclose = () => {
+        console.log("WS Closed");
         statusEl.innerText = 'Disconnected';
         statusEl.style.color = '#f00';
         setTimeout(connect, 2000);
@@ -40,37 +40,50 @@ function connect() {
     };
 }
 
-async function loadPois() {
-    const res = await fetch('/api/poi');
-    const pois = await res.json();
-    poiListEl.innerHTML = '';
-    pois.forEach(poi => {
-        const li = document.createElement('li');
-        li.innerText = poi.name;
-        li.onclick = () => navigateTo(poi.id);
-        poiListEl.appendChild(li);
-    });
-}
-
-async function navigateTo(id) {
-    await fetch('/api/navigate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_id: id })
-    });
-}
-
-savePoiBtn.onclick = async () => {
-    const name = prompt('Enter location name:');
-    if (name) {
-        await fetch('/api/poi', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
-        loadPois();
+function sendMotion(vx, vy, omega) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log("Sending Motion:", {vx, vy, omega});
+        ws.send(JSON.stringify({ joystick: { vx, vy, omega } }));
     }
-};
+}
+
+// Global key state
+const activeKeys = new Set();
+
+window.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    if (!activeKeys.has(key)) {
+        activeKeys.add(key);
+        console.log("Key Down:", key);
+        processKeys();
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    const key = e.key.toLowerCase();
+    activeKeys.delete(key);
+    console.log("Key Up:", key);
+    processKeys();
+});
+
+function processKeys() {
+    let vx = 0, vy = 0, omega = 0;
+    const speed = 0.3;
+    const turn = 0.6;
+
+    if (activeKeys.has('w') || activeKeys.has('arrowup')) vx = speed;
+    if (activeKeys.has('s') || activeKeys.has('arrowdown')) vx = -speed;
+    if (activeKeys.has('a') || activeKeys.has('arrowleft')) vy = speed;
+    if (activeKeys.has('d') || activeKeys.has('arrowright')) vy = -speed;
+    if (activeKeys.has('q')) omega = turn;
+    if (activeKeys.has('e')) omega = -turn;
+
+    sendMotion(vx, vy, omega);
+}
+
+// Joystick fallback
+const joystick = new Joystick('joystickZone', (vx, vy, omega) => {
+    sendMotion(vx, vy, omega);
+});
 
 connect();
-loadPois();
