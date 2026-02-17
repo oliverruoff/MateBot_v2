@@ -92,7 +92,7 @@ class Robot:
                 if direction == 'left':
                     self.motors.move_motors(-100, 100, -100, 100, speed)
                 else:
-                    self.motors.move_motors(100, -100, 100, -100, speed)
+                    self.motors.move_motors(-100, 100, -100, 100, speed)
                 time.sleep(0.05)
                 current_yaw = self.imu.get_yaw()
             
