@@ -90,10 +90,10 @@ class Robot:
             while abs(current_yaw) < target_angle and not self.stop_flag.is_set():
                 self.motors.enable()
                 if direction == 'left':
-                    self.motors.move_motors(-100, 100, -100, 100, speed)
+                    self.motors.move_motors(-200, 200, -200, 200, speed)
                 else:
-                    self.motors.move_motors(-100, 100, -100, 100, speed)
-                time.sleep(0.05)
+                    self.motors.move_motors(200, -200, 200, -200, speed)
+                time.sleep(0.1)
                 current_yaw = self.imu.get_yaw()
             
             self.motors.stop()
