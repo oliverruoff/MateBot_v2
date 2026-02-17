@@ -73,7 +73,7 @@ class Robot:
         
         return {'success': True, 'message': f'Moving {direction} {distance_cm}cm'}
 
-    def turn_precise(self, angle, direction='left', speed=1000):
+    def turn_precise(self, angle, direction='left', speed=500):
         self.stop_flag.clear()
         self.is_moving = True
         
