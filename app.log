@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "C:\Users\olive\Documents\develop\MateBot_v2\main.py", line 10, in <module>
+    from src.hardware.lidar import LidarSensor
+  File "C:\Users\olive\Documents\develop\MateBot_v2\src\hardware\lidar.py", line 1, in <module>
+    from src.hardware.ld19 import LD19
+  File "C:\Users\olive\Documents\develop\MateBot_v2\src\hardware\ld19.py", line 1, in <module>
+    import serial
+ModuleNotFoundError: No module named 'serial'
