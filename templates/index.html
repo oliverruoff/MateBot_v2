@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MateBot v2 Control</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #fff;
+        }
+        h1 {
+            margin-bottom: 20px;
+            font-size: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            max-width: 900px;
+            width: 100%;
+        }
+        .panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .panel h2 {
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            color: #4cc9f0;
+        }
+        .status-display {
+            grid-column: 1 / -1;
+            text-align: center;
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+        .status-value {
+            color: #4cc9f0;
+            font-weight: bold;
+        }
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            justify-items: center;
+            margin-bottom: 15px;
+        }
+        button {
+            background: linear-gradient(145deg, #4cc9f0, #4361ee);
+            border: none;
+            border-radius: 10px;
+            padding: 15px 25px;
+            color: white;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+            min-width: 80px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(67, 97, 238, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        button.stop {
+            background: linear-gradient(145deg, #f72585, #b5179e);
+            grid-column: 1 / -1;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        .input-group label {
+            min-width: 80px;
+        }
+        input[type="number"] {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+        }
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #4cc9f0;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-group button {
+            flex: 1;
+        }
+        .keyboard-hint {
+            grid-column: 1 / -1;
+            text-align: center;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 20px;
+        }
+        @media (max-width: 600px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>MateBot v2 Control</h1>
+    
+    <div class="container">
+        <div class="status-display">
+            Heading: <span id="heading" class="status-value">0.0°</span> | 
+            Status: <span id="status" class="status-value">Idle</span>
+        </div>
+
+        <div class="panel">
+            <h2>Manual Control</h2>
+            <div class="control-grid">
+                <button onclick="sendMove('rotate_left')" title="Rotate Left">↺</button>
+                <button onclick="sendMove('forward')" title="Forward">↑</button>
+                <button onclick="sendMove('rotate_right')" title="Rotate Right">↻</button>
+                <button onclick="sendMove('left')" title="Strafe Left">←</button>
+                <button onclick="sendMove('backward')" title="Backward">↓</button>
+                <button onclick="sendMove('right')" title="Strafe Right">→</button>
+            </div>
+            <button class="stop" onclick="sendStop()">STOP</button>
+        </div>
+
+        <div class="panel">
+            <h2>Precise Movement</h2>
+            <div class="input-group">
+                <label>Distance:</label>
+                <input type="number" id="distanceInput" placeholder="cm" value="10">
+            </div>
+            <div class="btn-group">
+                <button onclick="movePrecise('forward')">Forward</button>
+                <button onclick="movePrecise('backward')">Backward</button>
+            </div>
+            <div style="margin-top: 15px;"></div>
+            <div class="input-group">
+                <label>Angle:</label>
+                <input type="number" id="angleInput" placeholder="degrees" value="90">
+            </div>
+            <div class="btn-group">
+                <button onclick="turnPrecise('left')">Left</button>
+                <button onclick="turnPrecise('right')">Right</button>
+            </div>
+        </div>
+
+        <div class="keyboard-hint">
+            Use Arrow Keys for movement | Spacebar to stop
+        </div>
+    </div>
+
+    <script>
+        const headingEl = document.getElementById('heading');
+        const statusEl = document.getElementById('status');
+        
+        function updateStatus() {
+            fetch('/api/status')
+                .then(res => res.json())
+                .then(data => {
+                    headingEl.textContent = data.heading.toFixed(1) + '°';
+                    statusEl.textContent = data.moving ? 'Moving' : 'Idle';
+                })
+                .catch(err => console.error(err));
+        }
+
+        setInterval(updateStatus, 500);
+
+        function sendMove(direction) {
+            fetch('/api/move', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction })
+            });
+        }
+
+        function sendStop() {
+            fetch('/api/stop', { method: 'POST' });
+        }
+
+        function movePrecise(direction) {
+            const distance = document.getElementById('distanceInput').value;
+            fetch('/api/move_precise', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction, distance })
+            });
+        }
+
+        function turnPrecise(direction) {
+            const angle = document.getElementById('angleInput').value;
+            fetch('/api/turn_precise', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction, angle })
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowUp': sendMove('forward'); break;
+                case 'ArrowDown': sendMove('backward'); break;
+                case 'ArrowLeft': sendMove('left'); break;
+                case 'ArrowRight': sendMove('right'); break;
+                case ' ': sendStop(); break;
+            }
+        });
+    </script>
+</body>
+</html>
