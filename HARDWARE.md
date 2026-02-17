@@ -10,6 +10,7 @@ This document details the hardware components, wiring configuration, and specifi
 
 ## 🏎️ Locomotion: Omni-Directional Drive
 * **Wheels:** **4-Wheel Mecanum (Omni Wheels)**
+* **Wheel Diameter:** **79mm**
 * **Kinematics:** Allows for X-translation (forward/back), Y-translation (strafing), and Rotation (yaw) simultaneously.
 * **Motors:** 4x Stepper Motors (**NEMA 23**, 1.8° per full step)
 * **Drivers:** 4x **TB6600 Stepper Drivers**

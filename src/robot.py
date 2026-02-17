@@ -33,11 +33,11 @@ class Robot:
 
     def rotate_left(self, speed=None):
         self.motors.enable()
-        self.motors.move_motors(-100, 100, -100, 100, speed)
+        self.motors.move_motors(100, -100, 100, -100, speed)
 
     def rotate_right(self, speed=None):
         self.motors.enable()
-        self.motors.move_motors(100, -100, 100, -100, speed)
+        self.motors.move_motors(-100, 100, -100, 100, speed)
 
     def stop(self):
         self.stop_flag.set()
@@ -91,10 +91,10 @@ class Robot:
             while abs(current_yaw) < target_angle and not self.stop_flag.is_set():
                 self.motors.enable()
                 self.motors.move_motors(
-                    100 * direction_multiplier,
                     -100 * direction_multiplier,
                     100 * direction_multiplier,
                     -100 * direction_multiplier,
+                    100 * direction_multiplier,
                     speed
                 )
                 time.sleep(0.05)
