@@ -59,5 +59,27 @@ def turn_precise():
     result = robot.turn_precise(angle, direction, speed)
     return jsonify(result)
 
+@app.route('/test')
+def motor_test():
+    return render_template('motor_test.html')
+
+@app.route('/api/test/wheel', methods=['POST'])
+def test_wheel():
+    data = request.json
+    wheel = data.get('wheel')
+    direction = data.get('direction')
+    
+    steps = 200
+    if direction == 'backward':
+        steps = -200
+    
+    robot.motors.move_single_wheel(wheel, steps, 500)
+    return jsonify({'success': True, 'wheel': wheel, 'direction': direction})
+
+@app.route('/api/test/stop', methods=['POST'])
+def test_stop():
+    robot.motors.stop()
+    return jsonify({'success': True})
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

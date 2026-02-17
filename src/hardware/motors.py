@@ -134,6 +134,13 @@ class MotorController:
     def rotate_angle(self, angle_deg, speed_hz=None):
         pass
 
+    def move_single_wheel(self, wheel, steps, speed_hz=None):
+        if wheel not in MOTOR_PINS:
+            return
+        if not self.enabled:
+            self.enable()
+        self._move_motor(wheel, steps, speed_hz)
+
     def stop(self):
         if self.simulation:
             print("Simulation: Motors stopped")

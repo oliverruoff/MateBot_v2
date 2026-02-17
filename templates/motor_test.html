@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MateBot Motor Test</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { background: #1a1a2e; color: #fff; padding: 20px; }
+        h1 { margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; max-width: 600px; }
+        .motor { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; text-align: center; }
+        .motor h2 { color: #4cc9f0; margin-bottom: 10px; }
+        .btn-group { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button.fwd { background: #4cc9f0; color: #000; }
+        button.bwd { background: #f72585; color: #fff; }
+        button.stop { background: #ff0000; color: #fff; width: 100%; margin-top: 10px; }
+        button:active { transform: scale(0.95); }
+        .diagram { margin: 20px 0; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 10px; }
+        .robot { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 300px; margin: 0 auto; }
+        .wheel { padding: 15px; text-align: center; background: rgba(255,255,255,0.1); border-radius: 5px; }
+        .wheel.fl { border: 2px solid #4cc9f0; }
+        .wheel.fr { border: 2px solid #f72585; }
+        .wheel.bl { border: 2px solid #4cc9f0; }
+        .wheel.br { border: 2px solid #f72585; }
+        .status { margin-top: 20px; padding: 10px; background: #000; border-radius: 5px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Motor Test Interface</h1>
+    
+    <div class="diagram">
+        <p style="text-align:center; margin-bottom:10px;">Robot Top View (Front = Up)</p>
+        <div class="robot">
+            <div class="wheel fl">FL<br><small>Front Left</small></div>
+            <div class="wheel fr">FR<br><small>Front Right</small></div>
+            <div class="wheel bl">BL<br><small>Back Left</small></div>
+            <div class="wheel br">BR<br><small>Back Right</small></div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="motor">
+            <h2>FL</h2>
+            <div class="btn-group">
+                <button class="fwd" onclick="moveWheel('FL', 'forward')">Fwd</button>
+                <button class="bwd" onclick="moveWheel('FL', 'backward')">Bwd</button>
+            </div>
+        </div>
+        <div class="motor">
+            <h2>FR</h2>
+            <div class="btn-group">
+                <button class="fwd" onclick="moveWheel('FR', 'forward')">Fwd</button>
+                <button class="bwd" onclick="moveWheel('FR', 'backward')">Bwd</button>
+            </div>
+        </div>
+        <div class="motor">
+            <h2>BL</h2>
+            <div class="btn-group">
+                <button class="fwd" onclick="moveWheel('BL', 'forward')">Fwd</button>
+                <button class="bwd" onclick="moveWheel('BL', 'backward')">Bwd</button>
+            </div>
+        </div>
+        <div class="motor">
+            <h2>BR</h2>
+            <div class="btn-group">
+                <button class="fwd" onclick="moveWheel('BR', 'forward')">Fwd</button>
+                <button class="bwd" onclick="moveWheel('BR', 'backward')">Bwd</button>
+            </div>
+        </div>
+    </div>
+
+    <button class="stop" onclick="stopAll()">STOP ALL</button>
+
+    <div class="status" id="status">Ready</div>
+
+    <script>
+        function moveWheel(wheel, direction) {
+            document.getElementById('status').innerText = `Moving ${wheel} ${direction}...`;
+            fetch('/api/test/wheel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ wheel, direction })
+            });
+        }
+
+        function stopAll() {
+            fetch('/api/test/stop', { method: 'POST' });
+            document.getElementById('status').innerText = 'Stopped';
+        }
+    </script>
+</body>
+</html>
