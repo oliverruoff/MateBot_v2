@@ -4,7 +4,8 @@ import json
 import math
 from pathlib import Path
 import tarfile
-from flask import Flask, jsonify, request, send_file, send_from_directory
+from flask import Flask, jsonify, request, send_file, send_from_directory, Response
+from camera_client import CameraClient
 
 
 def numbers(data,fields):
@@ -14,10 +15,11 @@ def numbers(data,fields):
     return values
 
 
-def create_app(robot,web_root=None):
+def create_app(robot,web_root=None,camera=None):
     root=Path(web_root or Path(__file__).parent/'web')
     app=Flask(__name__,static_folder=str(root),static_url_path='/assets')
     app.config['MAX_CONTENT_LENGTH']=256*1024
+    camera=camera or CameraClient()
 
     @app.after_request
     def headers(response):
@@ -31,6 +33,23 @@ def create_app(robot,web_root=None):
 
     @app.get('/')
     def index():return send_from_directory(root,'index.html')
+
+    @app.get('/drive')
+    def drive():return send_from_directory(root,'index.html')
+
+    @app.get('/api/camera/frame.jpg')
+    def camera_frame():
+        try:
+            image,sequence,age=camera.frame()
+            return Response(image,mimetype='image/jpeg',headers={
+                'X-Frame-Sequence':str(sequence),'X-Frame-Age-Ms':str(round(age))})
+        except Exception:
+            return jsonify(error='Kamera nicht verfügbar – Verbindung wird erneut versucht'),503
+
+    @app.get('/api/camera/status')
+    def camera_status():
+        try:return jsonify(camera.status())
+        except Exception:return jsonify(active=False,ready=False,error='Kameradienst nicht erreichbar'),503
 
     @app.get('/api/state')
     def state():return jsonify(robot.state())

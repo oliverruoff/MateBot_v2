@@ -593,6 +593,7 @@ class Bridge(Node):
                         self_points=self.self_points, last_pose=self.read_runtime().get('pose'),
                         initial_floor_test=not self.annotations['calibration']['translation'],
                         manual_limits=[CFG['manual_max_linear_speed'],CFG['manual_max_angular_speed']],
+                        camera_view=dict(yaw=CFG.get('camera_yaw',0.),horizontal_fov=CFG.get('camera_horizontal_fov',53.5)),
                         geometry=[CFG['footprint_length'],CFG['footprint_width']])
 
     def map_json(self):

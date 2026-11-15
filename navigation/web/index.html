@@ -1,9 +1,28 @@
 <!doctype html>
 <html lang="de">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f2f5ee"><title>Matebot · Erdgeschoss</title><link rel="stylesheet" href="/assets/style.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#12211d"><title>Matebot · Erdgeschoss</title><link rel="stylesheet" href="/assets/style.css"><link rel="stylesheet" href="/assets/drive.css"></head>
 <body>
+<section id="driveView" aria-label="Mobile Fahransicht">
+  <header class="driveHeader"><div class="driveBrand"><span>m</span><div>matebot<small>FAHRANSICHT</small></div></div><div class="driveHeaderActions"><button id="driveMap">▦ Karte</button><button id="driveStop">■ STOPP</button></div></header>
+  <div class="driveNotice"><span id="driveStatusDot"></span><p id="driveNoticeText">Verbindung wird aufgebaut …</p><button id="driveResume" hidden>Stand unverändert</button><button id="drivePosition" hidden>Position</button><button id="driveArm" disabled>Freigeben</button></div>
+  <section class="radarCard" aria-label="LiDAR in Blickrichtung nach vorne">
+    <div class="driveCardHead"><span>LiDAR <b>↑ VORNE</b></span><div class="rangeButtons" aria-label="LiDAR-Reichweite"><button data-range="2">2 m</button><button data-range="4" class="active">4 m</button><button data-range="6">6 m</button></div></div>
+    <div class="radarStage"><canvas id="frontLidar" aria-label="LiDAR: vorne oben, links links, rechts rechts"></canvas><span id="lidarStale" hidden>LiDAR nicht aktuell</span></div>
+    <div class="rangeReadouts"><div><small>LINKS VORNE</small><strong id="distanceLeft">—</strong></div><div class="forwardDistance"><small>GERADEAUS</small><strong id="distanceFront">—</strong></div><div><small>RECHTS VORNE</small><strong id="distanceRight">—</strong></div></div>
+  </section>
+  <section class="cameraCard" aria-label="Kamera-Livebild nach vorne">
+    <div class="driveCardHead"><span>Frontkamera <b id="cameraStatus">VERBINDET</b></span><button id="cameraToggle">Pause</button></div>
+    <div class="cameraStage"><img id="cameraFrame" alt="Livebild der Roboterkamera" draggable="false"><div class="cameraCrosshair" aria-hidden="true"></div><div class="cameraOverlay" id="cameraOverlay">Kamera wird verbunden …</div><span class="cameraDirection">↑ Gleiche Blickrichtung wie LiDAR</span></div>
+  </section>
+  <section class="touchControls" aria-label="Joystick und seitliche Mecanum-Steuerung">
+    <div class="joystickRow"><button class="strafeButton" id="strafeLeft" disabled><span>⇤</span><strong>LINKS</strong><small>versetzen</small></button>
+      <div class="joystickWrap"><div id="joystick" role="application" aria-label="Fahr-Joystick: hoch vorwärts, runter rückwärts, links oder rechts drehen" aria-disabled="true" tabindex="0"><div class="joystickAxis horizontal"></div><div class="joystickAxis vertical"></div><span class="stickUp">VOR</span><span class="stickDown">ZURÜCK</span><div id="joystickKnob"><span>⌖</span></div></div></div>
+      <button class="strafeButton" id="strafeRight" disabled><span>⇥</span><strong>RECHTS</strong><small>versetzen</small></button></div>
+    <div class="driveControlFoot"><span id="driveInputLabel">Loslassen stoppt</span><label>Tempo <input id="driveSpeed" type="range" min="1" max="3" step="0.5" value="2"><output id="driveSpeedValue">2 cm/s</output></label><span id="driveFloorHint">Prüfmodus · kurze Impulse</span></div>
+  </section>
+</section>
 <aside>
-  <div class="brand"><span class="logo">m</span><div>matebot<small>Dein Zuhause. Auf einer Karte.</small></div></div>
+  <div class="brand"><span class="logo">m</span><div>matebot<small>Dein Zuhause. Auf einer Karte.</small></div><button id="openDriveNav" class="openDriveButton">Fahren</button></div>
   <nav class="modes" aria-label="Betriebsart"><button data-mode="mapping" class="active">⌖ <span>Einlernen<small>Selbst fahren, Karte erweitern</small></span></button><button data-mode="zones">▦ <span>Sperrzonen<small>Rote Rasterzellen markieren</small></span></button><button data-mode="navigation">➤ <span>Ziele<small>Freie Stelle auf der Karte wählen</small></span></button></nav>
   <section id="drivePanel">
     <div class="section">MANUELLE STEUERUNG</div><p class="hint">Tasten gedrückt halten. Loslassen stoppt.<br>Am Computer auch mit WASD und Q / E.</p>
@@ -29,7 +48,7 @@
   <div class="footer"><span id="connection">●</span> LOKALES NETZWERK<br>Karte und Sperrzonen bleiben auf dem Roboter.</div>
 </aside>
 <main>
-  <header><div><span class="eyebrow">DEIN ZUHAUSE, ZELLE FÜR ZELLE</span><h1 id="title">Erdgeschoss</h1></div><div class="sensorBadges"><span id="lidarBadge">● LiDAR</span><span id="imuBadge">● IMU</span><button id="quickStop" class="stop">■ STOPP</button></div></header>
+  <header><div><span class="eyebrow">DEIN ZUHAUSE, ZELLE FÜR ZELLE</span><h1 id="title">Erdgeschoss</h1></div><div class="sensorBadges"><button id="openDrive" class="openDriveButton">Fahransicht</button><span id="lidarBadge">● LiDAR</span><span id="imuBadge">● IMU</span><button id="quickStop" class="stop">■ STOPP</button></div></header>
   <div id="banner" role="status">Verbindung wird aufgebaut …</div>
   <div class="mapwrap">
     <canvas id="map" aria-label="Karte mit Raster, Sperrzonen und Roboterposition"></canvas>
@@ -46,5 +65,5 @@
 <dialog id="goalDialog"><h2>Ziel auf der Karte</h2><p id="goalText">Matebot plant einen Weg über bekannte freie Flächen.</p><label class="field">Optional als Ziel speichern<input id="favoriteName" placeholder="Zum Beispiel Küche" maxlength="40"></label><div class="dialogbuttons"><button data-close="goalDialog">Schließen</button><button id="saveFavorite">Ziel speichern</button><button id="confirmGoal" class="primary">Hierhin fahren →</button></div></dialog>
 <dialog id="newDialog"><h2>Neue Karte beginnen?</h2><p>Die bisherige Karte mit ihren Sperrzonen wird archiviert. Eine neue Karte startet am aktuellen Standort. Dabei bleiben die Motoren gestoppt.</p><div class="dialogbuttons"><button data-close="newDialog">Abbrechen</button><button id="newNow" class="primary">Neue Karte starten</button></div></dialog>
 <dialog id="checksDialog"><h2>Fahrprüfung bestätigen</h2><p>Nur selbst durchgeführte Prüfungen bestätigen. Erst nach allen vier Prüfungen kann der Zielmodus freigegeben werden.</p><label class="check"><input id="checksOnSite" type="checkbox"> Ich habe die angekreuzten Prüfungen vor Ort durchgeführt.</label><div class="dialogbuttons"><button data-close="checksDialog">Abbrechen</button><button id="checksNow" class="primary">Speichern</button></div></dialog>
-<script src="/assets/app.js"></script>
+<script src="/assets/drive_math.js"></script><script src="/assets/app.js"></script><script src="/assets/drive_ui.js"></script>
 </body></html>

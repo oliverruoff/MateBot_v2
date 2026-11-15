@@ -5,6 +5,9 @@ und vier Mecanum-Rädern. Die aktuelle Anwendung liegt unter **[navigation/](nav
 
 **Oberfläche im Heimnetz: [http://matebot.local:8080](http://matebot.local:8080)**
 
+**[Handy-Fahransicht mit Kamera und Joystick](http://matebot.local:8080/drive)**:
+LiDAR in Blickrichtung, Livebild, Joystick und separate Mecanum-Seitwärtstasten.
+
 ## Bedienung
 
 1. **Einlernen:** Karte beginnen oder nach dem Einschalten die Startposition auf

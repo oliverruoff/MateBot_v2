@@ -5,6 +5,24 @@ Original software, its modified files and logs remain intact. Pre-change archive
 are stored under `/home/matebot/backups/`. No credentials or floor-plan data are
 included in the source repository.
 
+## Mobile cockpit and live camera
+
+- Actual OV5647 stream verified through the same-origin `/api/camera/frame.jpg`:
+  JPEG responses 200, changing sequences 118/121/124, frame ages 30/33/8 ms.
+  Images are upright with rotation 180; 640 × 360, target 12 FPS, browser 8–10 FPS.
+- `matebot-camera.service` is enabled and active, listening only on 127.0.0.1:8082.
+  The navigation service was restarted successfully and remains stopped/unarmed.
+- Chrome responsive checks: 390 × 844, 375 × 667 and 844 × 390. Portrait controls
+  fit within the viewport without horizontal overflow; landscape uses side-by-side
+  radar and video. Returning to the map restores a valid canvas size.
+- Touch events tested against a separate localhost fake robot, with no GPIO/ROS
+  connection: joystick generates positive forward velocity, side buttons generate
+  positive/negative lateral velocity with zero yaw, release sends zero. Camera
+  pause stops the fake robot and disables controls. No physical driving was performed.
+- 21 Python unit tests pass, including fresh/stale frame handling and HTTP proxy
+  failure behavior. Three Node tests verify joystick signs/deadzone, bounded
+  combined translation and front-aligned scan projection. JavaScript syntax passes.
+
 ## Physical observations with the owner present
 
 - Pi 4 Model B Rev 1.1, 4 GB, Debian 13 64-bit, USB SanDisk system drive.

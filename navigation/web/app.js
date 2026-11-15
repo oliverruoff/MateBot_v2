@@ -4,6 +4,7 @@ let state={},map=null,mapLayer=null,mapVersion=null,annotationRevision=-1;
 let scale=65,center=[0,0],fitNeeded=true,tool='mapping',brush='paint',positioning=false;
 let selected=null,drag=null,token=null,armedAt=0,lastOK=0,manualTimer=null,sequence=0;
 const keys=new Set();
+const manualInputs=new Map();
 
 function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,5500)}
 async function api(action,body={}){
@@ -18,9 +19,9 @@ const run=f=>async()=>{try{await f()}catch(e){toast(e.message)}};
 function screen(x,y){return [canvas.clientWidth/2+(x-center[0])*scale,canvas.clientHeight/2-(y-center[1])*scale]}
 function world(x,y){return [center[0]+(x-canvas.clientWidth/2)/scale,center[1]-(y-canvas.clientHeight/2)/scale]}
 function pixel(e){const r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
-function canDrive(){return !!token&&!state.estop&&!state.blocked&&tool==='mapping'&&!positioning&&Date.now()-lastOK<1200}
-function fit(){if(!map){center=[0,0];scale=65}else{const a=map.origin[2],mx=map.width*map.resolution/2,my=map.height*map.resolution/2;center=[map.origin[0]+mx*Math.cos(a)-my*Math.sin(a),map.origin[1]+mx*Math.sin(a)+my*Math.cos(a)];scale=Math.min(canvas.clientWidth/(map.width*map.resolution+1),canvas.clientHeight/(map.height*map.resolution+1))}fitNeeded=false;draw()}
-function size(){const d=devicePixelRatio||1;canvas.width=canvas.clientWidth*d;canvas.height=canvas.clientHeight*d;ctx.setTransform(d,0,0,d,0,0);if(fitNeeded&&map)fit();draw()}
+function canDrive(){return !!token&&!state.estop&&!state.blocked&&tool==='mapping'&&!positioning&&Date.now()-lastOK<1200&&(!window.MatebotCockpit?.visible()||window.MatebotCockpit.frameFresh())}
+function fit(){if(canvas.clientWidth<1||canvas.clientHeight<1){fitNeeded=true;return}if(!map){center=[0,0];scale=65}else{const a=map.origin[2],mx=map.width*map.resolution/2,my=map.height*map.resolution/2;center=[map.origin[0]+mx*Math.cos(a)-my*Math.sin(a),map.origin[1]+mx*Math.sin(a)+my*Math.cos(a)];scale=Math.min(canvas.clientWidth/(map.width*map.resolution+1),canvas.clientHeight/(map.height*map.resolution+1))}fitNeeded=false;draw()}
+function size(){if(canvas.clientWidth<1||canvas.clientHeight<1)return;const d=devicePixelRatio||1;canvas.width=canvas.clientWidth*d;canvas.height=canvas.clientHeight*d;ctx.setTransform(d,0,0,d,0,0);if(fitNeeded&&map)fit();draw()}
 new ResizeObserver(size).observe(canvas);
 function setMap(value){
   map=value;if(!map){mapLayer=null;$('#empty').hidden=false;draw();return}
@@ -47,7 +48,7 @@ function cellsDraw(cells,color){
   for(const [x,y] of cells){const p=screen(x*g,(y+1)*g),s=g*scale;if(p[0]+s<0||p[0]>canvas.clientWidth||p[1]+s<0||p[1]>canvas.clientHeight)continue;ctx.fillRect(p[0],p[1],s,s)}
 }
 function draw(){
-  const w=canvas.clientWidth,h=canvas.clientHeight;ctx.clearRect(0,0,w,h);
+  const w=canvas.clientWidth,h=canvas.clientHeight;if(w<1||h<1||!Number.isFinite(scale)||scale<=0)return;ctx.clearRect(0,0,w,h);
   if(mapLayer&&map){const p=screen(...map.origin);ctx.save();ctx.translate(...p);ctx.rotate(-map.origin[2]);ctx.imageSmoothingEnabled=false;ctx.drawImage(mapLayer,0,-map.height*map.resolution*scale,map.width*map.resolution*scale,map.height*map.resolution*scale);ctx.restore()}
   const g=state.annotations?.grid_size||.25;
   if($('#showGrid').checked){
@@ -100,6 +101,7 @@ function renderState(){
   document.querySelectorAll('[data-v]').forEach(b=>b.disabled=!canDrive());
   $('#confirmGoal').disabled=!token||state.estop||!state.calibrated||state.annotations?.mode!=='navigation';
   $('#lastPosition').disabled=!state.last_pose;
+  window.MatebotCockpit?.onState(state);
 }
 async function poll(){
   try{
@@ -112,22 +114,34 @@ async function poll(){
     draw();
   }catch{
     $('#banner').textContent='Verbindung unterbrochen. Steuerung gesperrt; der Roboter stoppt bei ausbleibenden Befehlen.';
-    $('#connection').style.color='#b5634c';state.blocked='Verbindung unterbrochen';token=null;clearInterval(manualTimer);manualTimer=null;
+    $('#connection').style.color='#b5634c';state.blocked='Verbindung unterbrochen';token=null;endManual();
     document.querySelectorAll('[data-v]').forEach(b=>b.disabled=true);
+    window.MatebotCockpit?.onDisconnect();
   }
   setTimeout(poll,400);
 }
 async function stop(){endManual();await api('stop');token=null;selected=null;keys.clear();draw()}
-function endManual(){
-  clearInterval(manualTimer);manualTimer=null;keys.clear();
-  if(token)api('manual',{vx:0,vy:0,wz:0,sequence:++sequence}).catch(()=>{});
+function inputVector(){return MatebotDrive.combine([...manualInputs.values()],Number($('#speed').value)/100,Math.min(.1,state.manual_limits?.[1]||.1))}
+function sendManualInput(){
+  const [vx,vy,wz]=inputVector();
+  const moving=!!(vx||vy||wz);
+  if(moving){if(!canDrive()){endManual();return}}
+  if(token)api('manual',{vx,vy,wz,sequence:++sequence}).catch(e=>{if(moving){endManual();toast(e.message)}});
 }
-function startManual(vector){
+function syncManual(){
+  const moving=inputVector().some(v=>Math.abs(v)>1e-6);
+  if(!moving){clearInterval(manualTimer);manualTimer=null;sendManualInput();return}
+  if(!manualTimer)manualTimer=setInterval(sendManualInput,100);
+  sendManualInput();
+}
+function endManual(source=null){
+  if(source)manualInputs.delete(source);
+  else{manualInputs.clear();keys.clear();window.MatebotCockpit?.resetControls()}
+  syncManual();
+}
+function startManual(vector,source='pad'){
   if(!canDrive())return;
-  clearInterval(manualTimer);const speed=Number($('#speed').value)/100;
-  let [vx,vy,wz]=vector;const norm=Math.max(1,Math.hypot(vx,vy));vx=vx/norm*speed;vy=vy/norm*speed;wz*=Math.min(.1,state.manual_limits?.[1]||.1);
-  const send=()=>{if(!canDrive()){endManual();return}api('manual',{vx,vy,wz,sequence:++sequence}).catch(e=>{endManual();toast(e.message)})};
-  send();manualTimer=setInterval(send,100);
+  manualInputs.set(source,vector);syncManual();
 }
 function openGoal(x,y,name=''){
   if(state.goal_status==='Unterwegs'){stop().catch(()=>{});toast('Laufende Fahrt gestoppt. Neues Ziel nach erneuter Freigabe starten.')}
@@ -172,7 +186,7 @@ canvas.onpointerup=async e=>{
 };
 document.querySelectorAll('[data-v]').forEach(b=>{
   b.onpointerdown=e=>{if(!canDrive())return;e.preventDefault();b.setPointerCapture(e.pointerId);startManual(b.dataset.v.split(',').map(Number))};
-  b.onpointerup=endManual;b.onpointercancel=endManual;b.onlostpointercapture=endManual;
+  b.onpointerup=()=>endManual('pad');b.onpointercancel=()=>endManual('pad');b.onlostpointercapture=()=>endManual('pad');
 });
 function keyboardVector(){return [(keys.has('w')?1:0)-(keys.has('s')?1:0),(keys.has('a')?1:0)-(keys.has('d')?1:0),(keys.has('q')?1:0)-(keys.has('e')?1:0)]}
 window.addEventListener('keydown',e=>{
@@ -180,10 +194,16 @@ window.addEventListener('keydown',e=>{
   if(e.code==='Space'){e.preventDefault();stop().catch(()=>{});return}
   if(document.querySelector('dialog[open]'))return;
   const key=e.key.toLowerCase();if(!'wasdqe'.includes(key)||key.length!==1||!canDrive())return;
-  e.preventDefault();if(!keys.has(key)){keys.add(key);startManual(keyboardVector())}
+  e.preventDefault();if(!keys.has(key)){keys.add(key);startManual(keyboardVector(),'keyboard')}
 });
-window.addEventListener('keyup',e=>{const key=e.key.toLowerCase();if(!keys.has(key))return;keys.delete(key);const v=keyboardVector();if(v.some(Boolean))startManual(v);else endManual()});
+window.addEventListener('keyup',e=>{const key=e.key.toLowerCase();if(!keys.has(key))return;keys.delete(key);const v=keyboardVector();if(v.some(Boolean))startManual(v,'keyboard');else endManual('keyboard')});
 window.addEventListener('blur',()=>{endManual();if(token)stop().catch(()=>{})});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){endManual();if(token)stop().catch(()=>{})}});
 setInterval(()=>{if(token&&!document.hidden&&Date.now()-lastOK<1000)api('heartbeat').catch(()=>{token=null;endManual();toast('Steuerung abgelaufen – erneut freigeben')})},400);
+window.MatebotApp={api,stop,startManual,endManual,canDrive,toast,state:()=>state,ownsControl:()=>!!token,
+  setSpeed:value=>{const v=String(value);$('#speed').value=v;$('#speedValue').textContent=v+' cm/s'},
+  ensureMapping:async()=>{if(state.annotations?.mode!=='mapping'){await stop();state.annotations=await api('settings',{mode:'mapping'});annotationRevision=-1;tool='mapping';renderAnnotations();renderState()}},
+  openArm:()=>{$('#onSite').checked=false;$('#armDialog').showModal()},
+  resume:async()=>{if(state.last_pose)await restore(state.last_pose)},
+  selectPosition:()=>$('#position').click(),redraw:()=>{size();renderState()}};
 poll();

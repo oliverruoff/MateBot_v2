@@ -1,0 +1,18 @@
+[Unit]
+Description=Matebot local CSI camera frames
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=matebot
+SupplementaryGroups=video render
+WorkingDirectory=/home/matebot/develop/matebot-navigation
+ExecStart=/usr/bin/python3 /home/matebot/develop/matebot-navigation/camera_service.py
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

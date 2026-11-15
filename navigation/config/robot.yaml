@@ -29,6 +29,10 @@ lidar_yaw: -1.5707963267948966
 # Chassis returns observed up to 3 cm outside nominal outline (near-range error).
 # Masked rays stay unknown; Nav2's collision circle includes this padded outline.
 self_filter_padding: 0.03
+camera_rotation: 180
+camera_yaw: 0.0
+# Nominal Camera Module v1 field of view; orientation aid, not pixel calibration.
+camera_horizontal_fov: 53.5
 max_linear_speed: 0.08
 max_angular_speed: 0.18
 imu_address: 104

@@ -6,6 +6,30 @@ Checkout bleibt erhalten; die laufende Installation liegt unter
 
 **[Oberfläche öffnen](http://matebot.local:8080)** · kein Cloud-Dienst, alle Assets lokal.
 
+## Handy: Kamera und Joystick
+
+**[Fahransicht öffnen](http://matebot.local:8080/drive)**. Auf kleinen Displays
+öffnet sich diese Ansicht auch automatisch; **Karte** wechselt zur Grundrissansicht.
+Oben zeigt der LiDAR die vordere Hälfte der Umgebung: vorne ist oben, links bleibt
+links. Die Anzeige dreht nicht mit der Hauskarte. Der helle Sichtkegel entspricht
+ungefähr dem Kamerablickfeld, nicht einer pixelgenauen Kamera-LiDAR-Kalibrierung.
+Die drei Abstände sind Messungen vom LiDAR, keine freien Abstände zur Stoßstange.
+
+Darunter läuft die Frontkamera. Der Joystick unten fährt vorwärts/rückwärts und
+dreht links/rechts. **Links versetzen** und **Rechts versetzen** bewegen den Roboter
+seitlich ohne Drehung. Joystick und eine Seitwärtstaste können gleichzeitig gehalten
+werden; die kombinierte Geschwindigkeit bleibt begrenzt. Loslassen, Wechsel zur
+Karte, ein Hintergrund-Tab oder **STOPP** beenden die Bedienung. Ein über 1,2 s
+nicht erneuertes Kamerabild stoppt die Fahransicht und sperrt ihre Steuerung.
+Nach erneutem Verbinden ist eine neue Freigabe nötig. Die bestehenden Bodenprüfungen
+und anfänglichen kurzen Impulse gelten auch hier.
+
+Die CSI-Kamera liefert 640 × 360 mit bis zu 12 Bildern/s; im Browser wurden 8–10
+Bilder/s beobachtet. `camera_rotation: 180` richtet die kopfüber montierte OV5647
+auf. Der separate Hostdienst öffnet die Kamera bei Bedarf und schließt sie nach
+vier Sekunden ohne Bildabruf. Bilder bleiben im RAM. Port 8082 ist nur an Loopback
+gebunden; der Browser bezieht Bilder über denselben lokalen Webserver wie die UI.
+
 ## Erste Verwendung zu Hause
 
 1. Roboter auf ebenen Boden stellen, Fahrbereich frei halten und Treppen physisch
@@ -106,12 +130,16 @@ Snapshots bleiben erhalten. Nach Wiederherstellung die Position erneut bestätig
 
 Voraussetzungen auf dem bestehenden Pi: Docker/Compose und laufendes `pigpiod`.
 Auf diesem Debian-System wurden `docker.io` und `docker-compose` verwendet.
+Für die Kamera zusätzlich die Hostpakete `python3-picamera2` und `python3-yaml`
+installieren. Der Benutzer `matebot` benötigt Zugriff auf `video` und `render`.
 
 ```sh
 cd /home/matebot/develop/matebot-navigation
 sudo docker compose build
 sudo cp matebot-navigation.service /etc/systemd/system/
+sudo cp matebot-camera.service /etc/systemd/system/
 sudo systemctl daemon-reload
+sudo systemctl enable --now matebot-camera.service
 sudo systemctl enable --now matebot-navigation.service
 ```
 
@@ -125,6 +153,8 @@ Quellcode und Konfiguration sind read-only in den Container eingebunden. Nach
 Änderungen `sudo systemctl restart matebot-navigation.service`. Bei geänderten
 Abhängigkeiten vorher `sudo docker compose build`. Daten liegen separat unter
 `./data`; sie werden weder ins Image noch ins Git-Repository gepackt.
+Nach Änderungen an Kamera oder ihrer Konfiguration zusätzlich
+`sudo systemctl restart matebot-camera.service` ausführen.
 
 ## Hardware / Sicherheitsverhalten
 
@@ -153,6 +183,8 @@ sperren die Ausgabe. Diese Software ersetzt keinen physischen Not-Aus.
 python3 -m unittest discover -s tests -v
 python3 -m compileall -q .
 node --check web/app.js
+node --check web/drive_ui.js
+node --test tests/drive_math.test.js
 # Im ROS-Container, mit gefälschtem GPIO und isolierter Domain:
 sudo docker exec -e ROS_DOMAIN_ID=143 matebot-navigation bash -c \
   'source /opt/ros/jazzy/setup.bash && python3 /app/tests/ros_safety_check.py'
