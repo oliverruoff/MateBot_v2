@@ -1,5 +1,20 @@
 # MateBot v2 Hardware Specifications
 
+## Current measured setup (2026-11-15)
+
+The active software is documented in `navigation/README.md`; configuration is
+`navigation/config/robot.yaml`. Owner-measured outside dimensions: **41 cm long,
+30 cm wide**, **31 cm wheelbase**, **21 cm track width**. The LD19 is centered,
+**14 cm above ground**. A stationary front-obstacle comparison established
+`lidar_yaw = -pi/2`; the cable exit alone did not establish the forward direction.
+
+Raised-wheel tests confirmed forward-drive polarity with **FL/FR/BL/BR direction
+multipliers `[-1, 1, -1, 1]`**. The current controller uses finite simultaneous
+pigpio waves, not indefinite PWM. Floor-distance, lateral, yaw and stopping tests
+remain to be performed before point-to-click driving is enabled. Motor/wheel and
+microstep values below are nominal values from the prior documentation, not a new
+measurement of floor travel. No wheel encoders or cliff sensors are confirmed.
+
 This document details the hardware components, wiring configuration, and specific usage guidelines for the MateBot v2.
 
 ## 🧠 Core Controller

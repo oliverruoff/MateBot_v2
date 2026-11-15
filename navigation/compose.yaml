@@ -1,0 +1,20 @@
+services:
+  navigation:
+    build: .
+    image: matebot-navigation:local
+    container_name: matebot-navigation
+    network_mode: host
+    restart: unless-stopped
+    devices:
+      - /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0:/dev/ttyUSB0
+      - /dev/i2c-1:/dev/i2c-1
+    volumes:
+      - ./:/app:ro
+      - ./data:/data
+      - ./config/robot.yaml:/app/config/robot.yaml:ro
+    environment:
+      - TZ=Europe/Berlin
+      - ROS_DOMAIN_ID=42
+      - ROS_LOCALHOST_ONLY=1
+      - OMP_NUM_THREADS=2
+    stop_grace_period: 40s

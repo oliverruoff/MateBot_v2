@@ -1,0 +1,180 @@
+# Matebot: Einlernen · Sperrzonen · Ziele
+
+Eigenständige ROS-2-Jazzy-Anwendung für den vorhandenen Raspberry Pi 4. Der alte
+Checkout bleibt erhalten; die laufende Installation liegt unter
+`/home/matebot/develop/matebot-navigation`.
+
+**[Oberfläche öffnen](http://matebot.local:8080)** · kein Cloud-Dienst, alle Assets lokal.
+
+## Erste Verwendung zu Hause
+
+1. Roboter auf ebenen Boden stellen, Fahrbereich frei halten und Treppen physisch
+   absichern. Die Motoren sind beim Start immer gesperrt.
+2. **Einlernen** wählen. Für einen neuen Grundriss **Neue Karte beginnen** anklicken.
+   Alte Karten werden archiviert. Beim Fortsetzen: **Startposition setzen** und auf
+   der gespeicherten Karte von der Position in Blickrichtung ziehen. „Steht noch
+   an der letzten Position“ nur wählen, wenn das tatsächlich stimmt.
+3. **Steuerung freigeben** und die Aufsicht vor Ort bestätigen. Mit den
+   Bildschirmtasten oder WASD bewegen, mit Q/E drehen. Gedrückt halten; Loslassen
+   oder Leertaste stoppt. Das gilt auch auf dem Smartphone.
+4. Die individuellen Rad-Richtungen sind geprüft. Die erste Bodenfahrt ist noch
+   nicht geprüft: zunächst maximal 160 Schritte je Rad pro gehaltenem Befehl und
+   200 Hz. Bei den nominalen 1/32-Mikroschritten sind das etwa 6 mm; die reale
+   Strecke ist ausdrücklich noch zu kontrollieren. Loslassen setzt das Budget
+   für den nächsten bewusst ausgelösten Befehl zurück.
+5. Unter **Fahrprüfung & Einstellungen** nur selbst geprüfte Ergebnisse bestätigen:
+   Vorwärts/Rückwärts samt Strecke, Seitwärtsfahrt, Drehung/Kartenrichtung und
+   Stoppverhalten. Nach bestätigter Wegprüfung entfällt die kurze Impulsbegrenzung.
+   Erst nach allen vier Prüfungen kann der Zielmodus freigegeben werden.
+6. Langsam durchs Erdgeschoss fahren. SLAM erweitert die Karte dabei laufend.
+   **Karte speichern** schreibt sofort; ansonsten wird alle 30 Sekunden gesichert.
+
+Das Tempo ist eine aus den Schritten berechnete Schätzung. Radencoder sind nicht
+bekannt; Schlupf und ausgelassene Motorschritte müssen am realen Fahrzeug beurteilt
+werden. Das System ist noch nicht als unbeaufsichtigter autonomer Roboter erprobt.
+
+## Raster und Sperrzonen
+
+**Sperrzonen** stoppt die Steuerung. Mit **Sperren** Zellen anklicken oder ein
+Rechteck ziehen, mit **Freigeben** wieder entfernen. Rastergrößen: 10, 25, 50 oder
+100 cm. Ein Rasterwechsel deckt vorhandene Sperrflächen konservativ ab, anstatt
+sie zu löschen. Änderungen sind unmittelbar dauerhaft gespeichert.
+
+Die Zellen beziehen sich auf den festen Karten-Koordinatenursprung (auch bei
+negativen Koordinaten); sie verrutschen nicht, wenn die SLAM-Karte größer wird.
+Auf `/map` veröffentlicht die Brücke eine Kopie der echten `/slam_map` mit den
+Sperrzellen als Hindernissen. Globale **und** lokale Costmaps benutzen diese Karte.
+Ein zusätzlicher Fahrwächter prüft die Roboterfläche und die vorausberechnete
+Bewegung gegen dieselben Sperrzellen, auch bei manueller Steuerung. Der rohe
+SLAM-Grundriss bleibt von den Sperrzonen getrennt.
+
+Die Anzeige zeigt die gewählte Zellengröße. Die eigentliche SLAM-Karte hat 5 cm
+Auflösung. Sperrzonen benötigen eine korrekte Roboterposition. Treppen müssen
+physisch abgesichert bleiben: Ein waagerechter LiDAR erkennt Absturzkanten nicht
+zuverlässig, und Positionsfehler können eine digitale Grenze verschieben.
+
+## Ziele und Favoriten
+
+**Ziele** wählen, eine bekannte freie Stelle anklicken und bei Bedarf einen Namen
+speichern. Favoriten bleiben auch nach Neustart erhalten. Nach den vier
+bestätigten Bodenprüfungen: Zielmodus vor Ort freigeben und **Hierhin fahren**
+wählen. Nav2 plant um Wände und Sperrzonen, lokale Costmaps berücksichtigen den
+aktuellen LiDAR. Nicht erreichbare Ziele werden abgebrochen. Es wird kein Weg
+durch unbekannte Kartenbereiche geplant. Stopp ist jederzeit erreichbar.
+
+## Speicherung / Wiederanlauf
+
+- `data/session.json`: Karten-ID, Name, Betriebsart, Raster, Sperrzellen, Favoriten,
+  Prüfstand. Atomarer Austausch mit `fsync`; beschädigte Zonendaten werden niemals
+  stillschweigend durch leere Zonen ersetzt.
+- `data/runtime.json`: letzte bekannte Position und Sicherungszeit, getrennt vom
+  Karteninhalt. Eine gespeicherte Position ist keine garantierte neue Lokalisierung.
+- `data/map-*`: vollständige Snapshots mit SLAM-Posegraph, Sensordaten, Rohkarte,
+  PGM/YAML, Metadaten, Pose und SHA-256-Prüfsummen. `data/current` verweist atomar
+  auf einen vollständig geschriebenen Snapshot. Je aktive Karte werden 20
+  Revisionen aufbewahrt; archivierte Karten bleiben getrennt erhalten.
+- Beim normalen Herunterfahren stoppt PID 1 zuerst die Motoren und sichert die
+  Karte, **bevor** ROS beendet wird. Bei plötzlichem Stromverlust bleibt die letzte
+  vollständig geschriebene Sicherung erhalten; die letzten bis zu 30 Sekunden
+  Kartierung können fehlen. Ein hartes Abschalten garantiert keine fehlerfreie
+  Hardware oder kein beschädigtes Dateisystem.
+- Die Oberfläche zeigt nach Neustart die gespeicherte Karte, Zonen und Favoriten.
+  Die Steuerung bleibt gesperrt, bis die Position bestätigt und vor Ort neu
+  freigegeben wird. Eine neue Startaufnahme überschreibt keine alte Hauskarte.
+
+## Sicherung und Wiederherstellung
+
+**Sicherung laden** lädt ein `.tar.gz` auf das bedienende Gerät herunter. Enthalten
+sind der aktuelle Grundriss/Posegraph und die zuletzt gespeicherten Zonen und
+Favoriten. Diesen Download zusätzlich zum Pi aufbewahren.
+
+Zum Wiederherstellen das Archiv auf den Pi kopieren und dort ausführen:
+
+```sh
+cd /home/matebot/develop/matebot-navigation
+sudo systemctl stop matebot-navigation.service
+sudo docker compose stop
+sudo python3 restore_backup.py /pfad/zur/matebot-sicherung.tar.gz --confirm
+sudo systemctl start matebot-navigation.service
+```
+
+Der Wiederhersteller akzeptiert nur definierte reguläre Dateien, prüft Karten-ID
+und Prüfsummen und verwirft Pfad-Traversal, Links und doppelte Einträge. Vorhandene
+Snapshots bleiben erhalten. Nach Wiederherstellung die Position erneut bestätigen.
+
+## Installation / Autostart
+
+Voraussetzungen auf dem bestehenden Pi: Docker/Compose und laufendes `pigpiod`.
+Auf diesem Debian-System wurden `docker.io` und `docker-compose` verwendet.
+
+```sh
+cd /home/matebot/develop/matebot-navigation
+sudo docker compose build
+sudo cp matebot-navigation.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now matebot-navigation.service
+```
+
+Bei anderem Installationsort die Pfade in der Service-Datei anpassen. Der Service
+wartet beim Boot auf den LiDAR unter seiner stabilen USB-ID, I²C und `pigpiod`.
+Docker und pigpiod müssen aktiviert bleiben. Die alten `matebot.service` und
+`matebot-watchdog.service` bleiben deaktiviert. Es darf nur einen Motorcontroller
+geben. Kein Internet-Portforwarding für die LAN-Oberfläche einrichten.
+
+Quellcode und Konfiguration sind read-only in den Container eingebunden. Nach
+Änderungen `sudo systemctl restart matebot-navigation.service`. Bei geänderten
+Abhängigkeiten vorher `sudo docker compose build`. Daten liegen separat unter
+`./data`; sie werden weder ins Image noch ins Git-Repository gepackt.
+
+## Hardware / Sicherheitsverhalten
+
+Raspberry Pi 4 (4 GB), LD19 an CP2102, MPU6050 an I²C 0x68, CSI-OV5647. Vom Besitzer
+gemessen: 41 × 30 cm, Radstand 31 cm, Spurweite 21 cm, LiDAR mittig 14 cm hoch.
+Richtungsfaktoren in Reihenfolge FL/FR/BL/BR: `[-1, 1, -1, 1]`. Die Richtungen
+wurden einzeln aufgebockt bestätigt. Front-Kartonvergleich ergab LiDAR-Yaw `-pi/2`.
+200 Schritte/Umdrehung, 32 Mikroschritte und 79 mm Räder stammen aus der bisherigen
+Hardwarebeschreibung; ihre reale Fahrstrecke ist noch am Boden zu prüfen.
+
+Chassis-Nahreflexionen innerhalb der Kontur plus 3 cm werden als unbekannte
+Laserstrahlen behandelt, niemals als Freiraum. Der konservative Nav2-Kreis
+umschließt diese Fläche. Der MPU6050 misst die Z-Achse (Register 0x47); sein Bias
+wird bei stillstehendem Start neu bestimmt.
+
+Eine kurzlebige Steuerungskennung gehört genau einem Browser. Andere Leser
+verlängern sie nicht. Ohne Heartbeat wird nach 1,2 s gestoppt; manuelle Befehle
+verfallen nach 250 ms. Sequenznummern verhindern, dass verspätete Fahrbefehle ein
+Loslassen überholen. Jede Motor-Welle endet spätestens nach 80 ms, selbst wenn
+der Prozess stirbt. Stale Sensoren, ungültige Position, Hindernisse und Sperrzonen
+sperren die Ausgabe. Diese Software ersetzt keinen physischen Not-Aus.
+
+## Prüfungen
+
+```sh
+python3 -m unittest discover -s tests -v
+python3 -m compileall -q .
+node --check web/app.js
+# Im ROS-Container, mit gefälschtem GPIO und isolierter Domain:
+sudo docker exec -e ROS_DOMAIN_ID=143 matebot-navigation bash -c \
+  'source /opt/ros/jazzy/setup.bash && python3 /app/tests/ros_safety_check.py'
+# Echter Nav2-Planer, künstliche Karte, KEIN Motorcontroller:
+sudo docker run --rm --network host -e ROS_DOMAIN_ID=144 -e ROS_LOCALHOST_ONLY=1 \
+  -v "$PWD:/app:ro" matebot-navigation:local bash -c \
+  'source /opt/ros/jazzy/setup.bash && python3 /app/tests/nav2_planner_check.py'
+```
+
+Der isolierte Planertest verlangt einen Weg um eine Wand durch eine Tür. Eine
+Raster-Sperrzone schließt danach die Tür; der Planer muss den Weg verweigern.
+Das ist ein Softwaretest und kein Nachweis einer realen autonomen Bodenfahrt.
+Siehe [VERIFICATION.md](VERIFICATION.md) für tatsächliche Hardware-Prüfungen.
+
+`wheel_test.py --wheel FL --raised` (auch FR/BL/BR) ist nur für explizit bestätigte,
+stabil aufgebockte Tests mit freidrehenden Rädern. Der Container muss dabei aus
+sein. Diese Tests wurden während der ersten Einrichtung mit dem Besitzer benutzt.
+
+## Upstream
+
+`config/nav2.upstream.yaml`: `ros-navigation/navigation2`, Jazzy,
+`nav2_bringup/params/nav2_params.yaml`, Apache-2.0.
+`config/slam.upstream.yaml`: `SteveMacenski/slam_toolbox`, Jazzy,
+`config/mapper_params_online_async.yaml`, LGPL-2.1. Original-Lizenztexte sind
+beigefügt. `configure.py` erzeugt die für dieses Fahrzeug abgeleiteten Parameter.

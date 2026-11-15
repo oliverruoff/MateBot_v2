@@ -1,0 +1,189 @@
+'use strict';
+const $=s=>document.querySelector(s),canvas=$('#map'),ctx=canvas.getContext('2d');
+let state={},map=null,mapLayer=null,mapVersion=null,annotationRevision=-1;
+let scale=65,center=[0,0],fitNeeded=true,tool='mapping',brush='paint',positioning=false;
+let selected=null,drag=null,token=null,armedAt=0,lastOK=0,manualTimer=null,sequence=0;
+const keys=new Set();
+
+function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,5500)}
+async function api(action,body={}){
+  const headers={'Content-Type':'application/json','X-Matebot-Control':'1'};
+  if(token)headers['X-Matebot-Lease']=token;
+  const response=await fetch('/api/'+action,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(35000)});
+  let value;try{value=await response.json()}catch{throw Error('Keine gültige Antwort vom Roboter')}
+  if(!response.ok)throw Error(value.error||'Aktion fehlgeschlagen');
+  return value;
+}
+const run=f=>async()=>{try{await f()}catch(e){toast(e.message)}};
+function screen(x,y){return [canvas.clientWidth/2+(x-center[0])*scale,canvas.clientHeight/2-(y-center[1])*scale]}
+function world(x,y){return [center[0]+(x-canvas.clientWidth/2)/scale,center[1]-(y-canvas.clientHeight/2)/scale]}
+function pixel(e){const r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
+function canDrive(){return !!token&&!state.estop&&!state.blocked&&tool==='mapping'&&!positioning&&Date.now()-lastOK<1200}
+function fit(){if(!map){center=[0,0];scale=65}else{const a=map.origin[2],mx=map.width*map.resolution/2,my=map.height*map.resolution/2;center=[map.origin[0]+mx*Math.cos(a)-my*Math.sin(a),map.origin[1]+mx*Math.sin(a)+my*Math.cos(a)];scale=Math.min(canvas.clientWidth/(map.width*map.resolution+1),canvas.clientHeight/(map.height*map.resolution+1))}fitNeeded=false;draw()}
+function size(){const d=devicePixelRatio||1;canvas.width=canvas.clientWidth*d;canvas.height=canvas.clientHeight*d;ctx.setTransform(d,0,0,d,0,0);if(fitNeeded&&map)fit();draw()}
+new ResizeObserver(size).observe(canvas);
+function setMap(value){
+  map=value;if(!map){mapLayer=null;$('#empty').hidden=false;draw();return}
+  mapLayer=document.createElement('canvas');mapLayer.width=map.width;mapLayer.height=map.height;
+  const c=mapLayer.getContext('2d'),img=c.createImageData(map.width,map.height);let free=0;
+  for(let i=0;i<map.cells.length;i++){
+    const v=map.cells[i],j=((map.height-1-Math.floor(i/map.width))*map.width+i%map.width)*4;
+    img.data.set(v<0?[226,234,216,255]:v>=65?[63,86,62,255]:v<25?[253,254,249,255]:[166,181,151,255],j);
+    if(v>=0&&v<25)free++;
+  }
+  c.putImageData(img,0,0);$('#empty').hidden=true;
+  $('#mapStats').textContent=(free*map.resolution**2).toFixed(1)+' m² freie Fläche · '+Math.round(map.resolution*100)+' cm Kartenauflösung';
+  if(fitNeeded)fit();draw();
+}
+function rasterCells(start,end){
+  const size=state.annotations?.grid_size||.25;
+  const left=Math.floor(Math.min(start[0],end[0])/size),right=Math.floor(Math.max(start[0],end[0])/size);
+  const bottom=Math.floor(Math.min(start[1],end[1])/size),top=Math.floor(Math.max(start[1],end[1])/size);
+  if((right-left+1)*(top-bottom+1)>4096)throw Error('Bitte kleinere Bereiche markieren (maximal 4096 Zellen).');
+  const result=[];for(let x=left;x<=right;x++)for(let y=bottom;y<=top;y++)result.push([x,y]);return result;
+}
+function cellsDraw(cells,color){
+  const g=state.annotations?.grid_size||.25;ctx.fillStyle=color;
+  for(const [x,y] of cells){const p=screen(x*g,(y+1)*g),s=g*scale;if(p[0]+s<0||p[0]>canvas.clientWidth||p[1]+s<0||p[1]>canvas.clientHeight)continue;ctx.fillRect(p[0],p[1],s,s)}
+}
+function draw(){
+  const w=canvas.clientWidth,h=canvas.clientHeight;ctx.clearRect(0,0,w,h);
+  if(mapLayer&&map){const p=screen(...map.origin);ctx.save();ctx.translate(...p);ctx.rotate(-map.origin[2]);ctx.imageSmoothingEnabled=false;ctx.drawImage(mapLayer,0,-map.height*map.resolution*scale,map.width*map.resolution*scale,map.height*map.resolution*scale);ctx.restore()}
+  const g=state.annotations?.grid_size||.25;
+  if($('#showGrid').checked){
+    const step=g*Math.max(1,Math.ceil(8/(g*scale))),lo=world(0,h),hi=world(w,0);
+    ctx.lineWidth=.6;ctx.strokeStyle='#69815324';ctx.beginPath();
+    for(let x=Math.floor(lo[0]/step)*step;x<=hi[0];x+=step){const p=screen(x,0);ctx.moveTo(p[0],0);ctx.lineTo(p[0],h)}
+    for(let y=Math.floor(lo[1]/step)*step;y<=hi[1];y+=step){const p=screen(0,y);ctx.moveTo(0,p[1]);ctx.lineTo(w,p[1])}ctx.stroke();
+  }
+  cellsDraw(state.annotations?.zones||[],'#ba665c99');
+  if(drag&&tool==='zones'&&!positioning){try{cellsDraw(rasterCells(drag.start,drag.current),brush==='paint'?'#b65049bb':'#d7eed1cc')}catch{}}
+  if(state.localized&&state.path?.length){ctx.strokeStyle='#c6924d';ctx.lineWidth=3;ctx.setLineDash([6,5]);ctx.beginPath();state.path.forEach((p,i)=>{const s=screen(...p);i?ctx.lineTo(...s):ctx.moveTo(...s)});ctx.stroke();ctx.setLineDash([])}
+  const pose=state.localized?state.pose:state.last_pose;
+  if(pose){
+    if(state.localized){const [lx,ly,la]=state.lidar_transform||[0,0,0];ctx.fillStyle='#729548a0';for(const [px,py] of state.points||[]){const x=lx+px*Math.cos(la)-py*Math.sin(la),y=ly+px*Math.sin(la)+py*Math.cos(la),p=screen(pose.x+x*Math.cos(pose.yaw)-y*Math.sin(pose.yaw),pose.y+x*Math.sin(pose.yaw)+y*Math.cos(pose.yaw));ctx.fillRect(p[0]-1,p[1]-1,2,2)}}
+    const p=screen(pose.x,pose.y);ctx.save();ctx.translate(...p);ctx.rotate(-pose.yaw);ctx.globalAlpha=state.localized?1:.45;
+    const dims=state.geometry||[.41,.3];ctx.strokeStyle='#bc965d';ctx.lineWidth=1;ctx.strokeRect(-dims[0]*scale/2,-dims[1]*scale/2,dims[0]*scale,dims[1]*scale);
+    ctx.fillStyle='#d49e58';ctx.strokeStyle='white';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(0,0,8,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(17,0);ctx.lineTo(5,-5);ctx.lineTo(5,5);ctx.closePath();ctx.fill();ctx.restore();
+  }
+  if(selected){const p=screen(...selected);ctx.strokeStyle='#b17d3b';ctx.lineWidth=2;ctx.beginPath();ctx.arc(...p,11,0,Math.PI*2);ctx.stroke()}
+  if(positioning&&drag){const a=screen(...drag.start),b=screen(...drag.current);ctx.strokeStyle='#ba8b4b';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke()}
+  const ruler=scale>150?.5:scale<30?2:1;$('#scale').textContent=ruler+' m';$('#scale').style.width=Math.max(15,ruler*scale)+'px';
+}
+function renderAnnotations(){
+  const a=state.annotations;if(!a||annotationRevision===a.revision)return;annotationRevision=a.revision;
+  $('#title').textContent=a.title;document.title='Matebot · '+a.title;$('#mapName').value=a.title;
+  $('#gridSize').value=String(a.grid_size);$('#favoriteCount').textContent=a.favorites.length;
+  document.querySelectorAll('[data-check]').forEach(c=>c.checked=!!a.calibration[c.dataset.check]);
+  const list=$('#favorites');list.replaceChildren();
+  for(const f of a.favorites){
+    const row=document.createElement('div');row.className='favoriteRow';
+    const button=document.createElement('button');button.textContent='⌖ '+f.name;button.onclick=()=>openGoal(f.x,f.y,f.name);
+    const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label',f.name+' entfernen');remove.onclick=run(async()=>{await api('favorite',{...f,delete:true});toast('Gespeichertes Ziel entfernt')});
+    row.append(button,remove);list.append(row);
+  }
+  if(!a.favorites.length){const p=document.createElement('p');p.className='hint';p.textContent='Im Zielmodus einen Punkt wählen und benennen.';list.append(p)}
+  if(tool!=='zones')tool=a.mode;renderMode();
+}
+function renderMode(){document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===tool));$('#drivePanel').hidden=tool!=='mapping';$('#zoneTools').hidden=tool!=='zones'||positioning;$('#release').hidden=tool==='zones';$('#positionHelp').hidden=!positioning;draw()}
+function renderState(){
+  $('#lidarBadge').classList.toggle('offline',state.lidar_age>.4);$('#imuBadge').classList.toggle('offline',state.imu_age>.4);
+  const text=!state.localized&&state.saved_map?'Gespeicherte Karte geladen. Startposition bestätigen oder eine neue Karte beginnen.':state.blocked||(tool==='navigation'?'Freie Stelle als Ziel wählen. Sperrzonen und Hindernisse werden berücksichtigt.':'Bereit · Richtung gedrückt halten, Loslassen stoppt.');
+  $('#banner').textContent=text;$('#banner').classList.toggle('ready',!state.blocked);
+  $('#task').textContent=state.goal_status||'Gestoppt';$('#connection').style.color='#7fa35f';
+  $('#saved').textContent=state.saved_at?'Gesichert: '+state.saved_at+' · Auto alle 30 s':'Automatische Sicherung alle 30 Sekunden';
+  $('#floorNote').hidden=!state.initial_floor_test;
+  $('#position').hidden=!state.saved_map;
+  $('#backup').setAttribute('aria-disabled',String(!state.saved_map));
+  $('#release').disabled=!state.estop||!state.manual_ready||positioning||!state.localized||!state.pose||state.pose.age>.5||(state.annotations?.mode==='navigation'&&!state.calibrated);
+  $('#release').title=state.blocked||'Steuerung vor Ort freigeben';
+  document.querySelectorAll('[data-v]').forEach(b=>b.disabled=!canDrive());
+  $('#confirmGoal').disabled=!token||state.estop||!state.calibrated||state.annotations?.mode!=='navigation';
+  $('#lastPosition').disabled=!state.last_pose;
+}
+async function poll(){
+  try{
+    const response=await fetch('/api/state',{signal:AbortSignal.timeout(2500)});if(!response.ok)throw Error();
+    state=await response.json();lastOK=Date.now();
+    if(state.estop&&Date.now()-armedAt>1500)token=null;
+    renderAnnotations();renderState();
+    const v=String(state.map_version)+'/'+state.localized+'/'+state.annotations?.map_id;
+    if(v!==mapVersion){const value=await(await fetch('/api/map',{signal:AbortSignal.timeout(4000)})).json();mapVersion=v;setMap(value)}
+    draw();
+  }catch{
+    $('#banner').textContent='Verbindung unterbrochen. Steuerung gesperrt; der Roboter stoppt bei ausbleibenden Befehlen.';
+    $('#connection').style.color='#b5634c';state.blocked='Verbindung unterbrochen';token=null;clearInterval(manualTimer);manualTimer=null;
+    document.querySelectorAll('[data-v]').forEach(b=>b.disabled=true);
+  }
+  setTimeout(poll,400);
+}
+async function stop(){endManual();await api('stop');token=null;selected=null;keys.clear();draw()}
+function endManual(){
+  clearInterval(manualTimer);manualTimer=null;keys.clear();
+  if(token)api('manual',{vx:0,vy:0,wz:0,sequence:++sequence}).catch(()=>{});
+}
+function startManual(vector){
+  if(!canDrive())return;
+  clearInterval(manualTimer);const speed=Number($('#speed').value)/100;
+  let [vx,vy,wz]=vector;const norm=Math.max(1,Math.hypot(vx,vy));vx=vx/norm*speed;vy=vy/norm*speed;wz*=Math.min(.1,state.manual_limits?.[1]||.1);
+  const send=()=>{if(!canDrive()){endManual();return}api('manual',{vx,vy,wz,sequence:++sequence}).catch(e=>{endManual();toast(e.message)})};
+  send();manualTimer=setInterval(send,100);
+}
+function openGoal(x,y,name=''){
+  if(state.goal_status==='Unterwegs'){stop().catch(()=>{});toast('Laufende Fahrt gestoppt. Neues Ziel nach erneuter Freigabe starten.')}
+  selected=[x,y];$('#favoriteName').value=name;$('#goalText').textContent=state.calibrated?'Matebot plant einen Weg über bekannte freie Flächen. Zum Fahren zuerst den Zielmodus freigeben.':'Als Ziel speichern ist bereits möglich. Zum Anfahren zuerst die vier Bodenprüfungen unter Einstellungen abschließen.';
+  $('#confirmGoal').disabled=!token||state.estop||!state.calibrated||state.annotations?.mode!=='navigation';$('#goalDialog').showModal();draw();
+}
+async function restore(pose){await api('restore',{x:pose.x,y:pose.y,yaw:pose.yaw});positioning=false;mapVersion=null;renderMode();toast('Karte fortgesetzt. Position und Blickrichtung prüfen, dann vor Ort freigeben.')}
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).close());
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=run(async()=>{await stop();positioning=false;tool=b.dataset.mode;if(tool!=='zones')await api('settings',{mode:tool});renderMode()}));
+$('#release').onclick=()=>{$('#onSite').checked=false;$('#armDialog').showModal()};
+$('#armNow').onclick=run(async()=>{const value=await api('release',{mode:state.annotations.mode,on_site:$('#onSite').checked});token=value.token;sequence=0;armedAt=Date.now();$('#armDialog').close();toast('Steuerung freigegeben. Loslassen oder STOPP hält an.')});
+$('#stop').onclick=run(stop);
+$('#quickStop').onclick=run(stop);
+$('#save').onclick=run(async()=>{await api('save');toast('Karte, Position und Sperrzonen gespeichert')});
+$('#position').onclick=run(async()=>{await stop();positioning=true;renderMode()});
+$('#lastPosition').onclick=run(async()=>{if(state.last_pose)await restore(state.last_pose)});
+$('#cancelPosition').onclick=()=>{positioning=false;renderMode()};
+$('#newMap').onclick=run(async()=>{await stop();$('#newDialog').showModal()});
+$('#newNow').onclick=run(async()=>{await stop();await api('new-map',{confirm:true});$('#newDialog').close();positioning=false;tool='mapping';mapVersion=null;fitNeeded=true;setMap(null);renderMode();toast('Neue Karte begonnen. Die bisherige Karte wurde archiviert.')});
+$('#saveName').onclick=run(async()=>{await api('settings',{title:$('#mapName').value});toast('Kartenname gespeichert')});
+$('#saveChecks').onclick=run(async()=>{await stop();$('#checksOnSite').checked=false;$('#checksDialog').showModal()});
+$('#checksNow').onclick=run(async()=>{const checks={};document.querySelectorAll('[data-check]').forEach(c=>checks[c.dataset.check]=c.checked);await api('calibration',{checks,on_site:$('#checksOnSite').checked});$('#checksDialog').close();toast('Prüfstand gespeichert. Steuerung bleibt gestoppt.')});
+$('#saveFavorite').onclick=run(async()=>{if(!selected)return;await api('favorite',{name:$('#favoriteName').value,x:selected[0],y:selected[1]});toast('Ziel gespeichert')});
+$('#confirmGoal').onclick=run(async()=>{if(!selected)return;await api('goal',{x:selected[0],y:selected[1]});$('#goalDialog').close();toast('Ziel übernommen. Route wird geplant.')});
+$('#paint').onclick=()=>{brush='paint';$('#paint').classList.add('active');$('#erase').classList.remove('active')};
+$('#erase').onclick=()=>{brush='erase';$('#erase').classList.add('active');$('#paint').classList.remove('active')};
+$('#gridSize').onchange=run(async()=>{await api('zones',{paint:[],erase:[],grid_size:Number($('#gridSize').value),revision:state.annotations.revision});toast('Rastergröße gespeichert. Bestehende Sperrflächen bleiben gesperrt.')});
+$('#speed').oninput=()=>{$('#speedValue').textContent=$('#speed').value+' cm/s'};
+$('#showGrid').onchange=draw;$('#zoomIn').onclick=()=>{scale=Math.min(800,scale*1.25);draw()};$('#zoomOut').onclick=()=>{scale=Math.max(5,scale/1.25);draw()};$('#fit').onclick=fit;
+canvas.onwheel=e=>{e.preventDefault();const p=pixel(e),before=world(...p);scale=Math.max(5,Math.min(800,scale*(e.deltaY<0?1.12:1/1.12)));const after=world(...p);center=[center[0]+before[0]-after[0],center[1]+before[1]-after[1]];draw()};
+canvas.onpointerdown=e=>{const p=pixel(e);drag={pixel:p,start:world(...p),current:world(...p),center:[...center],revision:state.annotations?.revision};canvas.setPointerCapture(e.pointerId)};
+canvas.onpointermove=e=>{if(!drag)return;const p=pixel(e);if(positioning||tool==='zones')drag.current=world(...p);else center=[drag.center[0]-(p[0]-drag.pixel[0])/scale,drag.center[1]+(p[1]-drag.pixel[1])/scale];draw()};
+canvas.onpointercancel=()=>{drag=null;draw()};
+canvas.onpointerup=async e=>{
+  if(!drag)return;const d=drag,p=pixel(e);drag=null;
+  try{
+    if(positioning){const end=world(...p);if(Math.hypot(end[0]-d.start[0],end[1]-d.start[1])<.15)throw Error('Von der Position mindestens ein Stück in Blickrichtung ziehen.');await restore({x:d.start[0],y:d.start[1],yaw:Math.atan2(end[1]-d.start[1],end[0]-d.start[0])})}
+    else if(tool==='zones'){
+      const cells=rasterCells(d.start,world(...p));const body={paint:[],erase:[],grid_size:state.annotations.grid_size,revision:d.revision};body[brush]=cells;await api('zones',body);toast(cells.length+' Zellen '+(brush==='paint'?'gesperrt':'freigegeben')+' und gespeichert');
+    }else if(tool==='navigation'&&Math.hypot(p[0]-d.pixel[0],p[1]-d.pixel[1])<5){const point=world(...p);openGoal(...point)}
+  }catch(error){toast(error.message)}draw();
+};
+document.querySelectorAll('[data-v]').forEach(b=>{
+  b.onpointerdown=e=>{if(!canDrive())return;e.preventDefault();b.setPointerCapture(e.pointerId);startManual(b.dataset.v.split(',').map(Number))};
+  b.onpointerup=endManual;b.onpointercancel=endManual;b.onlostpointercapture=endManual;
+});
+function keyboardVector(){return [(keys.has('w')?1:0)-(keys.has('s')?1:0),(keys.has('a')?1:0)-(keys.has('d')?1:0),(keys.has('q')?1:0)-(keys.has('e')?1:0)]}
+window.addEventListener('keydown',e=>{
+  if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;
+  if(e.code==='Space'){e.preventDefault();stop().catch(()=>{});return}
+  if(document.querySelector('dialog[open]'))return;
+  const key=e.key.toLowerCase();if(!'wasdqe'.includes(key)||key.length!==1||!canDrive())return;
+  e.preventDefault();if(!keys.has(key)){keys.add(key);startManual(keyboardVector())}
+});
+window.addEventListener('keyup',e=>{const key=e.key.toLowerCase();if(!keys.has(key))return;keys.delete(key);const v=keyboardVector();if(v.some(Boolean))startManual(v);else endManual()});
+window.addEventListener('blur',()=>{endManual();if(token)stop().catch(()=>{})});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){endManual();if(token)stop().catch(()=>{})}});
+setInterval(()=>{if(token&&!document.hidden&&Date.now()-lastOK<1000)api('heartbeat').catch(()=>{token=null;endManual();toast('Steuerung abgelaufen – erneut freigeben')})},400);
+poll();

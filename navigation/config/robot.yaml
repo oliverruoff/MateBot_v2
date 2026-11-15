@@ -1,0 +1,36 @@
+# Measured geometry and wheel directions MUST be verified before motion is enabled.
+motion_verified: false
+manual_ready: true
+manual_max_linear_speed: 0.03
+manual_max_angular_speed: 0.10
+# Before distance calibration: at most 160 pulses per wheel per held command.
+floor_test_pulse_limit: 160
+floor_test_max_frequency: 200
+footprint_length: 0.41
+footprint_width: 0.30
+# Owner-measured wheel-center distances, in meters.
+wheelbase: 0.31
+track_width: 0.21
+wheel_diameter: 0.079
+microsteps: 32
+steps_per_revolution: 200
+# Order FL, FR, BL, BR. Raised-wheel observations: left reversed, right forward.
+direction_signs: [-1, 1, -1, 1]
+enable_pin: 26
+enable_active_low: true
+step_pins: [9, 22, 13, 5]
+direction_pins: [11, 10, 19, 6]
+lidar_port: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0
+lidar_x: 0.0
+lidar_y: 0.0
+lidar_z: 0.14
+# Front-box comparison: body front appears at ROS scan +91 deg; cardinal mount +90 deg.
+lidar_yaw: -1.5707963267948966
+# Chassis returns observed up to 3 cm outside nominal outline (near-range error).
+# Masked rays stay unknown; Nav2's collision circle includes this padded outline.
+self_filter_padding: 0.03
+max_linear_speed: 0.08
+max_angular_speed: 0.18
+imu_address: 104
+imu_yaw_sign: 1
+# Gyro bias is measured automatically during stationary startup.

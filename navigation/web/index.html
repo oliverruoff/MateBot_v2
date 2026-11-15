@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f2f5ee"><title>Matebot · Erdgeschoss</title><link rel="stylesheet" href="/assets/style.css"></head>
+<body>
+<aside>
+  <div class="brand"><span class="logo">m</span><div>matebot<small>Dein Zuhause. Auf einer Karte.</small></div></div>
+  <nav class="modes" aria-label="Betriebsart"><button data-mode="mapping" class="active">⌖ <span>Einlernen<small>Selbst fahren, Karte erweitern</small></span></button><button data-mode="zones">▦ <span>Sperrzonen<small>Rote Rasterzellen markieren</small></span></button><button data-mode="navigation">➤ <span>Ziele<small>Freie Stelle auf der Karte wählen</small></span></button></nav>
+  <section id="drivePanel">
+    <div class="section">MANUELLE STEUERUNG</div><p class="hint">Tasten gedrückt halten. Loslassen stoppt.<br>Am Computer auch mit WASD und Q / E.</p>
+    <div class="pad" aria-label="Manuelle Steuerung">
+      <button data-v="0,0,1" aria-label="Links drehen">↶</button><button data-v="1,0,0" aria-label="Vorwärts">↑</button><button data-v="0,0,-1" aria-label="Rechts drehen">↷</button>
+      <button data-v="0,1,0" aria-label="Seitwärts links">←</button><span>halten</span><button data-v="0,-1,0" aria-label="Seitwärts rechts">→</button>
+      <span></span><button data-v="-1,0,0" aria-label="Rückwärts">↓</button><span></span>
+    </div>
+    <label class="speed">Tempo <output id="speedValue">2 cm/s</output><input id="speed" type="range" min="1" max="3" step="0.5" value="2"></label>
+    <div id="floorNote" class="note">Erste Bodenprüfung: kurze, begrenzte Impulse. Nach dem Anhalten loslassen und erneut drücken.</div>
+  </section>
+  <button id="release" class="primary">Steuerung freigeben <span>→</span></button>
+  <button id="stop" class="stop">■ &nbsp; STOPP <small>Leertaste</small></button>
+  <div class="section">DEINE KARTE</div>
+  <div class="mapbuttons"><button id="save">↓ Karte speichern</button><a id="backup" href="/api/backup" download>↗ Sicherung laden</a></div>
+  <small id="saved">Automatische Sicherung alle 30 Sekunden</small>
+  <button id="position">⌖ Startposition setzen</button><button id="newMap" class="quiet">Neue Karte beginnen …</button>
+  <details id="favoriteSection"><summary>Gespeicherte Ziele <span id="favoriteCount">0</span></summary><div id="favorites"><p class="hint">Im Zielmodus einen Punkt wählen und benennen.</p></div></details>
+  <details id="setup"><summary>Fahrprüfung & Einstellungen</summary><p class="hint">Die Rad-Richtungen sind geprüft. Die folgenden Tests auf ebenem Boden persönlich durchführen und erst danach bestätigen.</p>
+    <label class="check"><input type="checkbox" data-check="translation"> Vorwärts/Rückwärts und Wegstrecke stimmen</label><label class="check"><input type="checkbox" data-check="lateral"> Links/Rechts-Seitwärtsfahrt stimmt</label><label class="check"><input type="checkbox" data-check="rotation"> Drehung und Kartenrichtung stimmen</label><label class="check"><input type="checkbox" data-check="stopping"> Loslassen, Stopp und Hindernis-Stopp geprüft</label><button id="saveChecks">Prüfergebnisse speichern</button>
+    <label class="field">Kartenname<input id="mapName" maxlength="60" value="Erdgeschoss"></label><button id="saveName">Namen speichern</button><p class="hint">41 × 30 cm · LiDAR mittig, 14 cm hoch.<br>Keine bestätigten Absturzsensoren: Treppen physisch absichern.</p>
+  </details>
+  <div class="footer"><span id="connection">●</span> LOKALES NETZWERK<br>Karte und Sperrzonen bleiben auf dem Roboter.</div>
+</aside>
+<main>
+  <header><div><span class="eyebrow">DEIN ZUHAUSE, ZELLE FÜR ZELLE</span><h1 id="title">Erdgeschoss</h1></div><div class="sensorBadges"><span id="lidarBadge">● LiDAR</span><span id="imuBadge">● IMU</span><button id="quickStop" class="stop">■ STOPP</button></div></header>
+  <div id="banner" role="status">Verbindung wird aufgebaut …</div>
+  <div class="mapwrap">
+    <canvas id="map" aria-label="Karte mit Raster, Sperrzonen und Roboterposition"></canvas>
+    <div id="empty"><span>⌖</span><h2>Hier entsteht deine Karte.</h2><p>Mit der manuellen Steuerung langsam durch die Räume fahren.<br>Die Karte wird dabei automatisch erweitert und gespeichert.</p></div>
+    <div class="maptoolbar"><button id="zoomIn" aria-label="Vergrößern">+</button><button id="zoomOut" aria-label="Verkleinern">−</button><button id="fit">Einpassen</button><label><input id="showGrid" type="checkbox" checked> Raster</label></div>
+    <div id="zoneTools" class="zoneTools" hidden><strong>Sperrzonen zeichnen</strong><div class="segmented"><button id="paint" class="active">Sperren</button><button id="erase">Freigeben</button></div><label>Zellengröße <select id="gridSize"><option value="0.1">10 cm</option><option value="0.25" selected>25 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option></select></label><small>Klicken oder ein Rechteck ziehen. Änderungen werden sofort gespeichert.</small></div>
+    <div id="positionHelp" class="positionHelp" hidden><strong>Wo steht Matebot?</strong><span>Position anklicken und in Blickrichtung ziehen.</span><button id="lastPosition">Steht noch an der letzten Position</button><button id="cancelPosition">Abbrechen</button></div>
+    <div class="legend"><i class="wall"></i> Wand <i class="free"></i> Frei <i class="forbidden"></i> Sperrzone <i class="robot"></i> Matebot</div><div id="scale">1 m</div>
+  </div>
+  <footer><span id="task">Gestoppt</span><span id="mapStats">–</span></footer>
+</main>
+<div id="toast" role="alert" hidden></div>
+<dialog id="armDialog"><h2>Steuerung freigeben</h2><p id="armText">Der Roboter fährt nur bei aktiver Verbindung. Manuell: Tasten gedrückt halten.</p><label class="check"><input id="onSite" type="checkbox"> Ich bin vor Ort; der Fahrbereich und Treppen sind abgesichert.</label><div class="dialogbuttons"><button data-close="armDialog">Abbrechen</button><button id="armNow" class="primary">Freigeben</button></div></dialog>
+<dialog id="goalDialog"><h2>Ziel auf der Karte</h2><p id="goalText">Matebot plant einen Weg über bekannte freie Flächen.</p><label class="field">Optional als Ziel speichern<input id="favoriteName" placeholder="Zum Beispiel Küche" maxlength="40"></label><div class="dialogbuttons"><button data-close="goalDialog">Schließen</button><button id="saveFavorite">Ziel speichern</button><button id="confirmGoal" class="primary">Hierhin fahren →</button></div></dialog>
+<dialog id="newDialog"><h2>Neue Karte beginnen?</h2><p>Die bisherige Karte mit ihren Sperrzonen wird archiviert. Eine neue Karte startet am aktuellen Standort. Dabei bleiben die Motoren gestoppt.</p><div class="dialogbuttons"><button data-close="newDialog">Abbrechen</button><button id="newNow" class="primary">Neue Karte starten</button></div></dialog>
+<dialog id="checksDialog"><h2>Fahrprüfung bestätigen</h2><p>Nur selbst durchgeführte Prüfungen bestätigen. Erst nach allen vier Prüfungen kann der Zielmodus freigegeben werden.</p><label class="check"><input id="checksOnSite" type="checkbox"> Ich habe die angekreuzten Prüfungen vor Ort durchgeführt.</label><div class="dialogbuttons"><button data-close="checksDialog">Abbrechen</button><button id="checksNow" class="primary">Speichern</button></div></dialog>
+<script src="/assets/app.js"></script>
+</body></html>
