@@ -69,6 +69,8 @@ class ROSMotorInterlockTests(unittest.TestCase):
     def advance(self,seconds=.05):
         self.now[0]+=seconds;self.robot.scan_at=self.robot.imu_at=self.now[0]
     def test_unverified_floor_command_has_hard_pulse_budget(self):
+        self.addCleanup(patch.stopall)
+        patch.dict(bridge.CFG,{'floor_test_enabled':True}).start()
         r=self.robot;token=r.arm('mapping',True)['token'];r.manual(token,.03,0.,0.,1)
         for _ in range(40):
             self.advance();r.heartbeat(token);r.cmd_at=self.now[0];r.tick()
@@ -87,6 +89,18 @@ class ROSMotorInterlockTests(unittest.TestCase):
         self.assertTrue(r.estop);self.assertIsNone(r.lease.token)
         self.assertEqual(r.pi.pins[bridge.CFG['enable_pin']],1)
         self.assertTrue(all(r.pi.pins[pin]==0 for pin in bridge.CFG['step_pins']))
+    def test_manual_gesture_drives_continuously_without_commissioning_pulse_limit(self):
+        r=self.robot;token=r.take_control('mapping')['token']
+        for sequence in range(1,61):
+            self.advance();r.heartbeat(token);r.manual(token,.03,0.,0.,sequence);r.tick()
+        self.assertFalse(r.estop);self.assertFalse(r.burst_exhausted)
+        emitted=sum(bool(p.gpio_on&(1<<bridge.CFG['step_pins'][0])) for wave in r.pi.sent for p in wave)
+        self.assertGreater(emitted,160)
+        r.manual(token,0.,0.,0.,61)
+        self.assertEqual(r.command,[0.,0.,0.])
+        r.stop();token=r.take_control('mapping')['token']
+        r.manual(token,.01,0.,0.,1)
+        self.assertEqual(r.command,[.01,0.,0.])
     def test_navigation_is_locked_but_manual_is_available_for_commissioning(self):
         r=self.robot
         with self.assertRaises(ValueError):r.arm('navigation',True)

@@ -5,6 +5,7 @@ manual_max_linear_speed: 0.03
 manual_max_angular_speed: 0.10
 # Before distance calibration: at most 160 pulses per wheel per held command.
 floor_test_pulse_limit: 160
+floor_test_enabled: false
 floor_test_max_frequency: 200
 footprint_length: 0.41
 footprint_width: 0.30

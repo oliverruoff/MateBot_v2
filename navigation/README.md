@@ -10,10 +10,13 @@ Checkout bleibt erhalten; die laufende Installation liegt unter
 
 **[Fahransicht öffnen](http://matebot.local:8080/drive)**. Auf kleinen Displays
 öffnet sich diese Ansicht auch automatisch; **Karte** wechselt zur Grundrissansicht.
-Oben zeigt der LiDAR die vordere Hälfte der Umgebung: vorne ist oben, links bleibt
-links. Die Anzeige dreht nicht mit der Hauskarte. Der helle Sichtkegel entspricht
-ungefähr dem Kamerablickfeld, nicht einer pixelgenauen Kamera-LiDAR-Kalibrierung.
-Die drei Abstände sind Messungen vom LiDAR, keine freien Abstände zur Stoßstange.
+Oben zeigt die Fahransicht dieselbe echte SLAM-Hauskarte wie die große
+Kartenansicht: Wände, bekannte freie Flächen, Sperrzonen, Roboterposition und
+aktuelle Laserpunkte. Neue Kartenstände erscheinen laufend (SLAM etwa alle zwei
+Sekunden). Die Karte bleibt am Haus ausgerichtet; der Roboterpfeil zeigt seine
+Blickrichtung. **Ganzes Haus** passt die wachsende Karte automatisch ein, +/−
+zoomen, Ziehen verschiebt. Die drei zusätzlichen Entfernungen beziehen sich auf
+den LiDAR, nicht auf den freien Abstand zur Stoßstange.
 
 Darunter läuft die Frontkamera. Der Joystick unten fährt vorwärts/rückwärts und
 dreht links/rechts. **Links versetzen** und **Rechts versetzen** bewegen den Roboter
@@ -21,8 +24,10 @@ seitlich ohne Drehung. Joystick und eine Seitwärtstaste können gleichzeitig ge
 werden; die kombinierte Geschwindigkeit bleibt begrenzt. Loslassen, Wechsel zur
 Karte, ein Hintergrund-Tab oder **STOPP** beenden die Bedienung. Ein über 1,2 s
 nicht erneuertes Kamerabild stoppt die Fahransicht und sperrt ihre Steuerung.
-Nach erneutem Verbinden ist eine neue Freigabe nötig. Die bestehenden Bodenprüfungen
-und anfänglichen kurzen Impulse gelten auch hier.
+Ein neuer bewusster Joystick- oder Tastendruck übernimmt die Steuerung automatisch.
+Es gibt keinen Freigabedialog. Die manuelle Fahrt läuft während des Haltens
+kontinuierlich mit maximal 3 cm/s und 0,1 rad/s; die frühere 160-Schritte-
+Impulsbegrenzung ist ausgeschaltet. Der Zielmodus behält seine vier Bodenprüfungen.
 
 Die CSI-Kamera liefert 640 × 360 mit bis zu 12 Bildern/s; im Browser wurden 8–10
 Bilder/s beobachtet. `camera_rotation: 180` richtet die kopfüber montierte OV5647
@@ -35,21 +40,17 @@ gebunden; der Browser bezieht Bilder über denselben lokalen Webserver wie die U
 1. Roboter auf ebenen Boden stellen, Fahrbereich frei halten und Treppen physisch
    absichern. Die Motoren sind beim Start immer gesperrt.
 2. **Einlernen** wählen. Für einen neuen Grundriss **Neue Karte beginnen** anklicken.
-   Alte Karten werden archiviert. Beim Fortsetzen: **Startposition setzen** und auf
-   der gespeicherten Karte von der Position in Blickrichtung ziehen. „Steht noch
-   an der letzten Position“ nur wählen, wenn das tatsächlich stimmt.
-3. **Steuerung freigeben** und die Aufsicht vor Ort bestätigen. Mit den
-   Bildschirmtasten oder WASD bewegen, mit Q/E drehen. Gedrückt halten; Loslassen
-   oder Leertaste stoppt. Das gilt auch auf dem Smartphone.
-4. Die individuellen Rad-Richtungen sind geprüft. Die erste Bodenfahrt ist noch
-   nicht geprüft: zunächst maximal 160 Schritte je Rad pro gehaltenem Befehl und
-   200 Hz. Bei den nominalen 1/32-Mikroschritten sind das etwa 6 mm; die reale
-   Strecke ist ausdrücklich noch zu kontrollieren. Loslassen setzt das Budget
-   für den nächsten bewusst ausgelösten Befehl zurück.
+   Alte Karten werden archiviert. Vorhandene Karten werden automatisch geladen;
+   der Roboter sucht seine Position durch Abgleich des LiDAR-Scans mit der Karte.
+3. Joystick oder Bildschirmtasten halten; WASD bewegt, Q/E dreht. Kein Freigeben
+   erforderlich. Loslassen oder Leertaste stoppt. Nach STOPP startet erst eine
+   neue bewusste Eingabe wieder eine Fahrt.
+4. Die individuellen Rad-Richtungen sind geprüft; reale Bodenstrecke, Seitwärtsfahrt
+   und Drehung noch nicht vollständig. Deshalb bleibt die manuelle Geschwindigkeit
+   niedrig, aber die Fahrt wird nicht mehr nach einem kurzen Prüfimpuls beendet.
 5. Unter **Fahrprüfung & Einstellungen** nur selbst geprüfte Ergebnisse bestätigen:
    Vorwärts/Rückwärts samt Strecke, Seitwärtsfahrt, Drehung/Kartenrichtung und
-   Stoppverhalten. Nach bestätigter Wegprüfung entfällt die kurze Impulsbegrenzung.
-   Erst nach allen vier Prüfungen kann der Zielmodus freigegeben werden.
+   Stoppverhalten. Erst nach allen vier Prüfungen steht der autonome Zielmodus bereit.
 6. Langsam durchs Erdgeschoss fahren. SLAM erweitert die Karte dabei laufend.
    **Karte speichern** schreibt sofort; ansonsten wird alle 30 Sekunden gesichert.
 
@@ -81,7 +82,7 @@ zuverlässig, und Positionsfehler können eine digitale Grenze verschieben.
 
 **Ziele** wählen, eine bekannte freie Stelle anklicken und bei Bedarf einen Namen
 speichern. Favoriten bleiben auch nach Neustart erhalten. Nach den vier
-bestätigten Bodenprüfungen: Zielmodus vor Ort freigeben und **Hierhin fahren**
+bestätigten Bodenprüfungen: **Hierhin fahren**
 wählen. Nav2 plant um Wände und Sperrzonen, lokale Costmaps berücksichtigen den
 aktuellen LiDAR. Nicht erreichbare Ziele werden abgebrochen. Es wird kein Weg
 durch unbekannte Kartenbereiche geplant. Stopp ist jederzeit erreichbar.
@@ -103,8 +104,13 @@ durch unbekannte Kartenbereiche geplant. Stopp ist jederzeit erreichbar.
   Kartierung können fehlen. Ein hartes Abschalten garantiert keine fehlerfreie
   Hardware oder kein beschädigtes Dateisystem.
 - Die Oberfläche zeigt nach Neustart die gespeicherte Karte, Zonen und Favoriten.
-  Die Steuerung bleibt gesperrt, bis die Position bestätigt und vor Ort neu
-  freigegeben wird. Eine neue Startaufnahme überschreibt keine alte Hauskarte.
+  Ein globaler Scan-Karten-Abgleich sucht die Position einschließlich Blickrichtung.
+  Drei übereinstimmende Messungen müssen genügend Wandtreffer, bekannte freie
+  Strahlen und Abstand zur zweitbesten Hypothese liefern. Erst dann wird der
+  Posegraph an der gefundenen Position fortgesetzt. Der gespeicherte letzte Ort
+  ist nur ein zusätzlicher Kandidat. Bei mehrdeutiger Umgebung läuft die Suche
+  im Stand weiter; die alte Karte wird nicht überschrieben. Optional ist unter
+  Einstellungen eine Positionskorrektur verfügbar.
 
 ## Sicherung und Wiederherstellung
 
@@ -124,7 +130,7 @@ sudo systemctl start matebot-navigation.service
 
 Der Wiederhersteller akzeptiert nur definierte reguläre Dateien, prüft Karten-ID
 und Prüfsummen und verwirft Pfad-Traversal, Links und doppelte Einträge. Vorhandene
-Snapshots bleiben erhalten. Nach Wiederherstellung die Position erneut bestätigen.
+Snapshots bleiben erhalten. Nach Wiederherstellung beginnt die automatische Ortung.
 
 ## Installation / Autostart
 

@@ -4,15 +4,15 @@
 <body>
 <section id="driveView" aria-label="Mobile Fahransicht">
   <header class="driveHeader"><div class="driveBrand"><span>m</span><div>matebot<small>FAHRANSICHT</small></div></div><div class="driveHeaderActions"><button id="driveMap">▦ Karte</button><button id="driveStop">■ STOPP</button></div></header>
-  <div class="driveNotice"><span id="driveStatusDot"></span><p id="driveNoticeText">Verbindung wird aufgebaut …</p><button id="driveResume" hidden>Stand unverändert</button><button id="drivePosition" hidden>Position</button><button id="driveArm" disabled>Freigeben</button></div>
-  <section class="radarCard" aria-label="LiDAR in Blickrichtung nach vorne">
-    <div class="driveCardHead"><span>LiDAR <b>↑ VORNE</b></span><div class="rangeButtons" aria-label="LiDAR-Reichweite"><button data-range="2">2 m</button><button data-range="4" class="active">4 m</button><button data-range="6">6 m</button></div></div>
-    <div class="radarStage"><canvas id="frontLidar" aria-label="LiDAR: vorne oben, links links, rechts rechts"></canvas><span id="lidarStale" hidden>LiDAR nicht aktuell</span></div>
+  <div class="driveNotice"><span id="driveStatusDot"></span><p id="driveNoticeText">Verbindung wird aufgebaut …</p><button id="driveResume" hidden>Stand unverändert</button><button id="drivePosition" hidden>Position</button><button id="driveArm" hidden>Freigeben</button></div>
+  <section class="radarCard" aria-label="Live-Hauskarte">
+    <div class="driveCardHead"><span>Hauskarte <b id="driveMapStatus">LIVE · SLAM</b></span><div class="rangeButtons" aria-label="Kartenansicht"><button id="driveZoomOut" aria-label="Karte verkleinern">−</button><button id="driveFit">Ganzes Haus</button><button id="driveZoomIn" aria-label="Karte vergrößern">+</button></div></div>
+    <div class="radarStage" id="driveMapStage"><canvas hidden id="frontLidar" aria-label="LiDAR: vorne oben, links links, rechts rechts"></canvas><span id="lidarStale" hidden>LiDAR nicht aktuell</span></div>
     <div class="rangeReadouts"><div><small>LINKS VORNE</small><strong id="distanceLeft">—</strong></div><div class="forwardDistance"><small>GERADEAUS</small><strong id="distanceFront">—</strong></div><div><small>RECHTS VORNE</small><strong id="distanceRight">—</strong></div></div>
   </section>
   <section class="cameraCard" aria-label="Kamera-Livebild nach vorne">
     <div class="driveCardHead"><span>Frontkamera <b id="cameraStatus">VERBINDET</b></span><button id="cameraToggle">Pause</button></div>
-    <div class="cameraStage"><img id="cameraFrame" alt="Livebild der Roboterkamera" draggable="false"><div class="cameraCrosshair" aria-hidden="true"></div><div class="cameraOverlay" id="cameraOverlay">Kamera wird verbunden …</div><span class="cameraDirection">↑ Gleiche Blickrichtung wie LiDAR</span></div>
+    <div class="cameraStage"><img id="cameraFrame" alt="Livebild der Roboterkamera" draggable="false"><div class="cameraCrosshair" aria-hidden="true"></div><div class="cameraOverlay" id="cameraOverlay">Kamera wird verbunden …</div><span class="cameraDirection">↑ Blickrichtung des Roboters</span></div>
   </section>
   <section class="touchControls" aria-label="Joystick und seitliche Mecanum-Steuerung">
     <div class="joystickRow"><button class="strafeButton" id="strafeLeft" disabled><span>⇤</span><strong>LINKS</strong><small>versetzen</small></button>
@@ -34,14 +34,14 @@
     <label class="speed">Tempo <output id="speedValue">2 cm/s</output><input id="speed" type="range" min="1" max="3" step="0.5" value="2"></label>
     <div id="floorNote" class="note">Erste Bodenprüfung: kurze, begrenzte Impulse. Nach dem Anhalten loslassen und erneut drücken.</div>
   </section>
-  <button id="release" class="primary">Steuerung freigeben <span>→</span></button>
+  <button id="release" hidden class="primary">Steuerung freigeben <span>→</span></button>
   <button id="stop" class="stop">■ &nbsp; STOPP <small>Leertaste</small></button>
   <div class="section">DEINE KARTE</div>
   <div class="mapbuttons"><button id="save">↓ Karte speichern</button><a id="backup" href="/api/backup" download>↗ Sicherung laden</a></div>
   <small id="saved">Automatische Sicherung alle 30 Sekunden</small>
-  <button id="position">⌖ Startposition setzen</button><button id="newMap" class="quiet">Neue Karte beginnen …</button>
+  <button id="newMap" class="quiet">Neue Karte beginnen …</button>
   <details id="favoriteSection"><summary>Gespeicherte Ziele <span id="favoriteCount">0</span></summary><div id="favorites"><p class="hint">Im Zielmodus einen Punkt wählen und benennen.</p></div></details>
-  <details id="setup"><summary>Fahrprüfung & Einstellungen</summary><p class="hint">Die Rad-Richtungen sind geprüft. Die folgenden Tests auf ebenem Boden persönlich durchführen und erst danach bestätigen.</p>
+  <details id="setup"><summary>Fahrprüfung & Einstellungen</summary><button id="position">⌖ Position bei Bedarf korrigieren</button><p class="hint">Die Rad-Richtungen sind geprüft. Die folgenden Tests auf ebenem Boden persönlich durchführen und erst danach bestätigen.</p>
     <label class="check"><input type="checkbox" data-check="translation"> Vorwärts/Rückwärts und Wegstrecke stimmen</label><label class="check"><input type="checkbox" data-check="lateral"> Links/Rechts-Seitwärtsfahrt stimmt</label><label class="check"><input type="checkbox" data-check="rotation"> Drehung und Kartenrichtung stimmen</label><label class="check"><input type="checkbox" data-check="stopping"> Loslassen, Stopp und Hindernis-Stopp geprüft</label><button id="saveChecks">Prüfergebnisse speichern</button>
     <label class="field">Kartenname<input id="mapName" maxlength="60" value="Erdgeschoss"></label><button id="saveName">Namen speichern</button><p class="hint">41 × 30 cm · LiDAR mittig, 14 cm hoch.<br>Keine bestätigten Absturzsensoren: Treppen physisch absichern.</p>
   </details>

@@ -34,6 +34,7 @@ from core import LD19, wheels, finite_wave
 from session import Session, ControlLease, atomic_json
 from spatial import overlay_indices, zone_collision, laser_to_base, self_return, obstacle_risk, sweep_hits_zones
 from api import create_app
+from localization import ScanMatcher, angle_delta
 
 ROOT = Path(__file__).parent
 DATA = Path('/data')
@@ -62,6 +63,7 @@ class Bridge(Node):
         self.localized = self.active_snapshot() is None
         self.restored = False
         self.pose_confirmed = False
+        self.localization_status='Position wird automatisch gesucht' if not self.localized else 'Neue Karte'
         self.scan_at = self.imu_at = self.cmd_at = 0.0
         self.scan_count = self.valid_points = 0
         self.nearest = float('inf')
@@ -120,6 +122,7 @@ class Bridge(Node):
         threading.Thread(target=self.lidar_loop, daemon=True).start()
         threading.Thread(target=self.imu_loop, daemon=True).start()
         threading.Thread(target=self.autosave_loop, daemon=True).start()
+        threading.Thread(target=self.localization_loop, daemon=True).start()
 
     def navigation_ready(self):
         return all(self.annotations['calibration'].values())
@@ -205,6 +208,10 @@ class Bridge(Node):
             self.last_manual_sequence=-1
             self.goal_status='Steuerung freigegeben'
             return dict(token=token)
+
+    def take_control(self,mode):
+        """An explicit drive/goal gesture acquires control, without a release dialog."""
+        return self.arm(mode,True)
 
     def heartbeat(self,token):
         with self.lock:self.lease.check(token,time.monotonic(),refresh=True)
@@ -300,7 +307,7 @@ class Bridge(Node):
         if include_stop and self.estop:return self.stop_reason
         if now-self.scan_at>.4 or self.valid_points<80:return 'LiDAR nicht bereit'
         if now-self.imu_at>.4:return 'IMU nicht bereit'
-        if not self.localized:return 'Startposition setzen oder eine neue Karte beginnen'
+        if not self.localized:return getattr(self,'localization_status','Position wird automatisch gesucht')
         if not self.pose or self.pose.get('age',99)>.5:return 'Roboterposition nicht aktuell'
         if sweep_hits_zones(self.pose,cmd or [0.,0.,0.],CFG,self.zones,self.annotations['grid_size']):
             return 'Sperrzone: Roboter oder Fahrweg überschneidet rote Zellen'
@@ -318,7 +325,7 @@ class Bridge(Node):
         self.pi.write(CFG['enable_pin'], 1 if CFG['enable_active_low'] else 0)
         self.wave_velocity = [0., 0., 0.]
 
-    def stop(self,reason='Gestoppt – Steuerung vor Ort freigeben'):
+    def stop(self,reason='Gestoppt'):
         with self.lock:
             self.estop = True
             self.stop_reason=reason
@@ -395,7 +402,7 @@ class Bridge(Node):
                         hz = [s*steps_m for s in speeds]
                         factor = min(1., 4800/max(max(abs(h) for h in hz),1.))
                         hz = [h*factor for h in hz]
-                        if not self.annotations['calibration']['translation']:
+                        if CFG.get('floor_test_enabled',False) and not self.annotations['calibration']['translation']:
                             remaining=CFG['floor_test_pulse_limit']-self.burst_pulses
                             if remaining<=0:
                                 self.burst_exhausted=True
@@ -591,7 +598,9 @@ class Bridge(Node):
                         saved_map=self.active_snapshot() is not None,
                         annotations=self.annotations, control_active=self.lease.token is not None,
                         self_points=self.self_points, last_pose=self.read_runtime().get('pose'),
-                        initial_floor_test=not self.annotations['calibration']['translation'],
+                        initial_floor_test=CFG.get('floor_test_enabled',False) and not self.annotations['calibration']['translation'],
+                        manual_blocked=self.readiness('mapping',include_stop=False),
+                        localization_status=getattr(self,'localization_status',''),
                         manual_limits=[CFG['manual_max_linear_speed'],CFG['manual_max_angular_speed']],
                         camera_view=dict(yaw=CFG.get('camera_yaw',0.),horizontal_fov=CFG.get('camera_horizontal_fov',53.5)),
                         geometry=[CFG['footprint_length'],CFG['footprint_width']])
@@ -740,6 +749,37 @@ class Bridge(Node):
                 self.save_map()
             except Exception as exc:
                 self.get_logger().warning('Autosave: '+str(exc))
+
+    def localization_loop(self):
+        matcher=None;previous=None;stable=0
+        while self.running:
+            time.sleep(2)
+            if self.localized or getattr(self,'map_transition',False):continue
+            try:
+                with self.lock:
+                    if time.monotonic()-self.scan_at>.4 or self.valid_points<80:continue
+                    points=list(self.base_points);prior=self.read_runtime().get('pose')
+                if matcher is None:
+                    grid=self.saved_map_json()
+                    if not grid:continue
+                    matcher=ScanMatcher(grid)
+                match=matcher.match(points,prior)
+                if not match:
+                    previous=None;stable=0
+                    self.localization_status='Position wird gesucht · Umgebung noch nicht eindeutig'
+                    continue
+                consistent=previous and math.hypot(match['x']-previous['x'],match['y']-previous['y'])<.15 and abs(angle_delta(match['yaw'],previous['yaw']))<.10
+                stable=stable+1 if consistent else 1;previous=match
+                self.localization_status='Position gefunden · Messungen werden geprüft'
+                if stable<3:continue
+                with self.save_lock:
+                    if self.localized:continue
+                    self._restore(match['x'],match['y'],match['yaw'])
+                self.localization_status='Automatisch lokalisiert'
+                self.get_logger().info('Automatic map localization: '+json.dumps(match))
+            except Exception as exc:
+                self.localization_status='Automatische Ortung wird erneut versucht'
+                self.get_logger().warning('Localization: '+str(exc))
 
     def goal(self, x, y,token):
         with self.lock:

@@ -90,6 +90,7 @@ def create_app(robot,web_root=None,camera=None):
                 robot.stop()
                 return jsonify(stopped=True)
             if action=='release':return jsonify(robot.arm(data.get('mode'),data.get('on_site')))
+            if action=='take-control':return jsonify(robot.take_control(data.get('mode')))
             if action=='heartbeat':
                 robot.heartbeat(token)
                 return jsonify(ok=True)

@@ -5,6 +5,8 @@ let scale=65,center=[0,0],fitNeeded=true,tool='mapping',brush='paint',positionin
 let selected=null,drag=null,token=null,armedAt=0,lastOK=0,manualTimer=null,sequence=0;
 const keys=new Set();
 const manualInputs=new Map();
+const mapHome=canvas.parentElement;
+let controlRequest=null,controlEpoch=0;
 
 function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,5500)}
 async function api(action,body={}){
@@ -19,7 +21,7 @@ const run=f=>async()=>{try{await f()}catch(e){toast(e.message)}};
 function screen(x,y){return [canvas.clientWidth/2+(x-center[0])*scale,canvas.clientHeight/2-(y-center[1])*scale]}
 function world(x,y){return [center[0]+(x-canvas.clientWidth/2)/scale,center[1]-(y-canvas.clientHeight/2)/scale]}
 function pixel(e){const r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
-function canDrive(){return !!token&&!state.estop&&!state.blocked&&tool==='mapping'&&!positioning&&Date.now()-lastOK<1200&&(!window.MatebotCockpit?.visible()||window.MatebotCockpit.frameFresh())}
+function canDrive(){return !state.manual_blocked&&state.manual_ready&&state.localized&&tool==='mapping'&&!positioning&&Date.now()-lastOK<1200&&(!window.MatebotCockpit?.visible()||window.MatebotCockpit.frameFresh())}
 function fit(){if(canvas.clientWidth<1||canvas.clientHeight<1){fitNeeded=true;return}if(!map){center=[0,0];scale=65}else{const a=map.origin[2],mx=map.width*map.resolution/2,my=map.height*map.resolution/2;center=[map.origin[0]+mx*Math.cos(a)-my*Math.sin(a),map.origin[1]+mx*Math.sin(a)+my*Math.cos(a)];scale=Math.min(canvas.clientWidth/(map.width*map.resolution+1),canvas.clientHeight/(map.height*map.resolution+1))}fitNeeded=false;draw()}
 function size(){if(canvas.clientWidth<1||canvas.clientHeight<1)return;const d=devicePixelRatio||1;canvas.width=canvas.clientWidth*d;canvas.height=canvas.clientHeight*d;ctx.setTransform(d,0,0,d,0,0);if(fitNeeded&&map)fit();draw()}
 new ResizeObserver(size).observe(canvas);
@@ -34,7 +36,7 @@ function setMap(value){
   }
   c.putImageData(img,0,0);$('#empty').hidden=true;
   $('#mapStats').textContent=(free*map.resolution**2).toFixed(1)+' m² freie Fläche · '+Math.round(map.resolution*100)+' cm Kartenauflösung';
-  if(fitNeeded)fit();draw();
+  if(fitNeeded||window.MatebotCockpit?.followMap())fit();draw();
 }
 function rasterCells(start,end){
   const size=state.annotations?.grid_size||.25;
@@ -86,10 +88,10 @@ function renderAnnotations(){
   if(!a.favorites.length){const p=document.createElement('p');p.className='hint';p.textContent='Im Zielmodus einen Punkt wählen und benennen.';list.append(p)}
   if(tool!=='zones')tool=a.mode;renderMode();
 }
-function renderMode(){document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===tool));$('#drivePanel').hidden=tool!=='mapping';$('#zoneTools').hidden=tool!=='zones'||positioning;$('#release').hidden=tool==='zones';$('#positionHelp').hidden=!positioning;draw()}
+function renderMode(){document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===tool));$('#drivePanel').hidden=tool!=='mapping';$('#zoneTools').hidden=tool!=='zones'||positioning;$('#release').hidden=true;$('#positionHelp').hidden=!positioning;draw()}
 function renderState(){
   $('#lidarBadge').classList.toggle('offline',state.lidar_age>.4);$('#imuBadge').classList.toggle('offline',state.imu_age>.4);
-  const text=!state.localized&&state.saved_map?'Gespeicherte Karte geladen. Startposition bestätigen oder eine neue Karte beginnen.':state.blocked||(tool==='navigation'?'Freie Stelle als Ziel wählen. Sperrzonen und Hindernisse werden berücksichtigt.':'Bereit · Richtung gedrückt halten, Loslassen stoppt.');
+  const text=!state.localized&&state.saved_map?(state.localization_status||'Position wird automatisch gesucht'):(state.manual_blocked||(!state.estop?state.blocked:''))||(tool==='navigation'?'Freie Stelle als Ziel wählen. Sperrzonen und Hindernisse werden berücksichtigt.':'Bereit · Richtung gedrückt halten, Loslassen stoppt.');
   $('#banner').textContent=text;$('#banner').classList.toggle('ready',!state.blocked);
   $('#task').textContent=state.goal_status||'Gestoppt';$('#connection').style.color='#7fa35f';
   $('#saved').textContent=state.saved_at?'Gesichert: '+state.saved_at+' · Auto alle 30 s':'Automatische Sicherung alle 30 Sekunden';
@@ -99,7 +101,7 @@ function renderState(){
   $('#release').disabled=!state.estop||!state.manual_ready||positioning||!state.localized||!state.pose||state.pose.age>.5||(state.annotations?.mode==='navigation'&&!state.calibrated);
   $('#release').title=state.blocked||'Steuerung vor Ort freigeben';
   document.querySelectorAll('[data-v]').forEach(b=>b.disabled=!canDrive());
-  $('#confirmGoal').disabled=!token||state.estop||!state.calibrated||state.annotations?.mode!=='navigation';
+  $('#confirmGoal').disabled=!state.localized||!state.calibrated||state.annotations?.mode!=='navigation';
   $('#lastPosition').disabled=!state.last_pose;
   window.MatebotCockpit?.onState(state);
 }
@@ -107,7 +109,7 @@ async function poll(){
   try{
     const response=await fetch('/api/state',{signal:AbortSignal.timeout(2500)});if(!response.ok)throw Error();
     state=await response.json();lastOK=Date.now();
-    if(state.estop&&Date.now()-armedAt>1500)token=null;
+    if(state.estop&&Date.now()-armedAt>1500&&token){token=null;endManual()}
     renderAnnotations();renderState();
     const v=String(state.map_version)+'/'+state.localized+'/'+state.annotations?.map_id;
     if(v!==mapVersion){const value=await(await fetch('/api/map',{signal:AbortSignal.timeout(4000)})).json();mapVersion=v;setMap(value)}
@@ -120,7 +122,18 @@ async function poll(){
   }
   setTimeout(poll,400);
 }
-async function stop(){endManual();await api('stop');token=null;selected=null;keys.clear();draw()}
+async function stop(){endManual();token=null;await api('stop');selected=null;keys.clear();draw()}
+async function ensureControl(mode='mapping'){
+  if(token&&!state.estop)return true;
+  if(controlRequest)return controlRequest;
+  const epoch=controlEpoch;
+  controlRequest=(async()=>{
+    const value=await api('take-control',{mode});
+    if(epoch!==controlEpoch){await api('stop');return false}
+    token=value.token;sequence=0;armedAt=Date.now();state.estop=false;state.blocked='';return true;
+  })().finally(()=>controlRequest=null);
+  return controlRequest;
+}
 function inputVector(){return MatebotDrive.combine([...manualInputs.values()],Number($('#speed').value)/100,Math.min(.1,state.manual_limits?.[1]||.1))}
 function sendManualInput(){
   const [vx,vy,wz]=inputVector();
@@ -136,19 +149,21 @@ function syncManual(){
 }
 function endManual(source=null){
   if(source)manualInputs.delete(source);
-  else{manualInputs.clear();keys.clear();window.MatebotCockpit?.resetControls()}
+  else{controlEpoch++;manualInputs.clear();keys.clear();window.MatebotCockpit?.resetControls()}
   syncManual();
 }
 function startManual(vector,source='pad'){
   if(!canDrive())return;
-  manualInputs.set(source,vector);syncManual();
+  manualInputs.set(source,vector);
+  if(token&&!state.estop){syncManual();return}
+  ensureControl().then(acquired=>{if(acquired)syncManual()}).catch(e=>{endManual();toast(e.message)});
 }
 function openGoal(x,y,name=''){
-  if(state.goal_status==='Unterwegs'){stop().catch(()=>{});toast('Laufende Fahrt gestoppt. Neues Ziel nach erneuter Freigabe starten.')}
-  selected=[x,y];$('#favoriteName').value=name;$('#goalText').textContent=state.calibrated?'Matebot plant einen Weg über bekannte freie Flächen. Zum Fahren zuerst den Zielmodus freigeben.':'Als Ziel speichern ist bereits möglich. Zum Anfahren zuerst die vier Bodenprüfungen unter Einstellungen abschließen.';
-  $('#confirmGoal').disabled=!token||state.estop||!state.calibrated||state.annotations?.mode!=='navigation';$('#goalDialog').showModal();draw();
+  if(state.goal_status==='Unterwegs'){stop().catch(()=>{});toast('Laufende Fahrt gestoppt. Neues Ziel wählen.')}
+  selected=[x,y];$('#favoriteName').value=name;$('#goalText').textContent=state.calibrated?'Matebot plant einen Weg über bekannte freie Flächen. Mit Hierhin fahren starten.':'Als Ziel speichern ist bereits möglich. Zum Anfahren zuerst die vier Bodenprüfungen unter Einstellungen abschließen.';
+  $('#confirmGoal').disabled=!state.localized||!state.calibrated||state.annotations?.mode!=='navigation';$('#goalDialog').showModal();draw();
 }
-async function restore(pose){await api('restore',{x:pose.x,y:pose.y,yaw:pose.yaw});positioning=false;mapVersion=null;renderMode();toast('Karte fortgesetzt. Position und Blickrichtung prüfen, dann vor Ort freigeben.')}
+async function restore(pose){await api('restore',{x:pose.x,y:pose.y,yaw:pose.yaw});positioning=false;mapVersion=null;renderMode();toast('Karte an korrigierter Position fortgesetzt.')}
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).close());
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=run(async()=>{await stop();positioning=false;tool=b.dataset.mode;if(tool!=='zones')await api('settings',{mode:tool});renderMode()}));
 $('#release').onclick=()=>{$('#onSite').checked=false;$('#armDialog').showModal()};
@@ -165,7 +180,7 @@ $('#saveName').onclick=run(async()=>{await api('settings',{title:$('#mapName').v
 $('#saveChecks').onclick=run(async()=>{await stop();$('#checksOnSite').checked=false;$('#checksDialog').showModal()});
 $('#checksNow').onclick=run(async()=>{const checks={};document.querySelectorAll('[data-check]').forEach(c=>checks[c.dataset.check]=c.checked);await api('calibration',{checks,on_site:$('#checksOnSite').checked});$('#checksDialog').close();toast('Prüfstand gespeichert. Steuerung bleibt gestoppt.')});
 $('#saveFavorite').onclick=run(async()=>{if(!selected)return;await api('favorite',{name:$('#favoriteName').value,x:selected[0],y:selected[1]});toast('Ziel gespeichert')});
-$('#confirmGoal').onclick=run(async()=>{if(!selected)return;await api('goal',{x:selected[0],y:selected[1]});$('#goalDialog').close();toast('Ziel übernommen. Route wird geplant.')});
+$('#confirmGoal').onclick=run(async()=>{if(!selected)return;if(!await ensureControl('navigation'))return;await api('goal',{x:selected[0],y:selected[1]});$('#goalDialog').close();toast('Ziel übernommen. Route wird geplant.')});
 $('#paint').onclick=()=>{brush='paint';$('#paint').classList.add('active');$('#erase').classList.remove('active')};
 $('#erase').onclick=()=>{brush='erase';$('#erase').classList.add('active');$('#paint').classList.remove('active')};
 $('#gridSize').onchange=run(async()=>{await api('zones',{paint:[],erase:[],grid_size:Number($('#gridSize').value),revision:state.annotations.revision});toast('Rastergröße gespeichert. Bestehende Sperrflächen bleiben gesperrt.')});
@@ -199,11 +214,14 @@ window.addEventListener('keydown',e=>{
 window.addEventListener('keyup',e=>{const key=e.key.toLowerCase();if(!keys.has(key))return;keys.delete(key);const v=keyboardVector();if(v.some(Boolean))startManual(v,'keyboard');else endManual('keyboard')});
 window.addEventListener('blur',()=>{endManual();if(token)stop().catch(()=>{})});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){endManual();if(token)stop().catch(()=>{})}});
-setInterval(()=>{if(token&&!document.hidden&&Date.now()-lastOK<1000)api('heartbeat').catch(()=>{token=null;endManual();toast('Steuerung abgelaufen – erneut freigeben')})},400);
+setInterval(()=>{if(token&&!document.hidden&&Date.now()-lastOK<1000)api('heartbeat').catch(()=>{token=null;endManual();toast('Verbindung abgelaufen – Joystick erneut betätigen')})},400);
 window.MatebotApp={api,stop,startManual,endManual,canDrive,toast,state:()=>state,ownsControl:()=>!!token,
   setSpeed:value=>{const v=String(value);$('#speed').value=v;$('#speedValue').textContent=v+' cm/s'},
   ensureMapping:async()=>{if(state.annotations?.mode!=='mapping'){await stop();state.annotations=await api('settings',{mode:'mapping'});annotationRevision=-1;tool='mapping';renderAnnotations();renderState()}},
   openArm:()=>{$('#onSite').checked=false;$('#armDialog').showModal()},
   resume:async()=>{if(state.last_pose)await restore(state.last_pose)},
-  selectPosition:()=>$('#position').click(),redraw:()=>{size();renderState()}};
+  selectPosition:()=>$('#position').click(),
+  mountMap:container=>{(container||mapHome).prepend(canvas);fitNeeded=true;size()},
+  fitMap:fit,zoomMap:factor=>{scale=Math.max(5,Math.min(800,scale*factor));draw()},
+  redraw:()=>{size();renderState()}};
 poll();

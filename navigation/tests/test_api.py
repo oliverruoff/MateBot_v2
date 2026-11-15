@@ -14,6 +14,7 @@ class FakeRobot:
         return {'token':'test-lease'}
     def heartbeat(self,token):
         if token!='test-lease':raise ValueError('Steuerung abgelaufen')
+    def take_control(self,mode):return self.arm(mode,True)
     def manual(self,token,*values,sequence=None):
         if token!='test-lease':raise ValueError('Steuerung abgelaufen')
         self.calls.append(('manual',values))
@@ -48,6 +49,14 @@ class APITests(unittest.TestCase):
         r=self.client.post('/api/stop',json={},headers=self.headers)
         self.assertEqual(r.status_code,200)
         self.assertEqual(self.robot.calls,[('stop',)])
+
+    def test_drive_gesture_acquires_control_without_presence_dialog(self):
+        response=self.client.post('/api/take-control',json={'mode':'mapping'},headers=self.headers)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['token'],'test-lease')
+        self.assertEqual(self.robot.calls,[('arm','mapping')])
+        denied=self.client.post('/api/take-control',json={'mode':'mapping'})
+        self.assertEqual(denied.status_code,403)
 
 
 if __name__=='__main__':unittest.main()

@@ -5,6 +5,36 @@ Original software, its modified files and logs remain intact. Pre-change archive
 are stored under `/home/matebot/backups/`. No credentials or floor-plan data are
 included in the source repository.
 
+## Direct driving, live map and automatic localization (update)
+
+- Manual pulse limiting is disabled in configuration. Six isolated ROS tests with
+  fake GPIO pass, including continuous held input beyond 160 pulses, explicit
+  stop/restart with a new gesture, owner timeout and no-go checks. No physical
+  movement was commanded for this update.
+- The touch UI acquires its lease on a drive gesture, without a release/presence
+  dialog. A separate localhost fake robot verified forward/strafe, zero on release,
+  STOP and the next gesture starting again without confirmation. Background/stale
+  video and missing sensor data still stop the output; held input never restarts
+  itself after a stop. The autonomous goal mode retains the existing floor checks.
+- The mobile panel contains the actual map canvas, including known free area,
+  walls, keepout cells, pose and scan overlay. It uses the existing `/api/map`
+  version polling, not a separate front-facing radar. Full-map fit, pan and zoom
+  are available; the same canvas returns to the large map editor.
+- Global localization searches free map positions and all headings against a
+  Gaussian wall field, rejects ray collisions/low coverage and competing poses,
+  then requires three consistent scans before deserializing the saved posegraph.
+  On the actual Pi after service restart: automatically localized, score 0.827,
+  competing-hypothesis margin 0.332, position subsequently about (0.004,-0.003),
+  yaw 0.002 rad, fresh pose, manual readiness clear, motor lease inactive.
+- Synthetic localization tests cover a moved/rotated robot with a deliberately
+  incorrect prior and a rotated map origin, ambiguous symmetric room rejection,
+  and missing/unrelated scans. The old pose alone is never treated as localization.
+- 25 Python tests pass both locally and on the Pi; three Node tests and JavaScript
+  syntax checks pass. Updated responsive layout checked at 390 × 844, 375 × 667
+  and 844 × 390, with a larger live-map panel and working map-editor switch.
+- Before deployment a private data/config archive was saved on the Pi at
+  `/home/matebot/backups/navigation-before-direct-controls.tar.gz`.
+
 ## Mobile cockpit and live camera
 
 - Actual OV5647 stream verified through the same-origin `/api/camera/frame.jpg`:

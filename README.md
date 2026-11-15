@@ -10,9 +10,9 @@ LiDAR in Blickrichtung, Livebild, Joystick und separate Mecanum-Seitwärtstasten
 
 ## Bedienung
 
-1. **Einlernen:** Karte beginnen oder nach dem Einschalten die Startposition auf
-   der gespeicherten Karte bestätigen. Steuerung vor Ort freigeben; die
-   Richtungstasten gedrückt halten. Loslassen stoppt. WASD bewegt, Q/E dreht.
+1. **Einlernen:** Karte beginnen oder nach dem Einschalten automatisch
+   in der gespeicherten Karte wiederfinden lassen. Joystick oder
+   Richtungstasten gedrückt halten; kein Freigabedialog. Loslassen stoppt. WASD bewegt, Q/E dreht.
 2. **Sperrzonen:** Rasterzellen anklicken oder Rechtecke ziehen. 10, 25, 50 oder
    100 cm Zellengröße wählen. Rote Zellen werden sofort gespeichert und sowohl
    bei der Wegplanung als auch beim manuellen Fahren berücksichtigt.
@@ -27,7 +27,7 @@ Ein kompletter Sicherungsdownload ist direkt in der Oberfläche möglich.
 
 Rad-Richtungen und LiDAR-Ausrichtung sind am Gerät geprüft. **Eine Bodenfahrt ist
 noch nicht verifiziert.** Manuelle Steuerung steht für beaufsichtigte erste
-Prüfungen bereit; anfangs sind die Impulse pro Tastendruck begrenzt. Unter
+Prüfungen mit niedrigem Tempo und kontinuierlicher manueller Fahrt bereit. Unter
 „Fahrprüfung & Einstellungen“ erst tatsächlich durchgeführte Prüfungen bestätigen.
 Der Zielmodus lässt sich erst nach allen vier Bodenprüfungen freigeben.
 

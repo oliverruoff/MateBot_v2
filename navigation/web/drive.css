@@ -2,7 +2,7 @@
 body.drive-view{display:block;background:#101d19;overflow:hidden;color:#eef6ed}
 body.drive-view>aside,body.drive-view>main{display:none!important}
 body.drive-view #driveView{display:grid}
-#driveView{height:100dvh;max-width:640px;margin:auto;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom));grid-template-rows:44px auto minmax(120px,1fr) minmax(150px,1.45fr) 196px;gap:8px}
+#driveView{height:100dvh;max-width:640px;margin:auto;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom));grid-template-rows:44px auto minmax(180px,1.45fr) minmax(140px,1fr) 196px;gap:8px}
 #driveView button{color:#dfecdf;background:#21382e;border:1px solid #365244;border-radius:12px;user-select:none;-webkit-user-select:none;min-height:36px}
 #driveView button:hover{background:#2a4539}
 #driveView button:disabled{opacity:.35}
@@ -69,6 +69,8 @@ body.drive-view dialog{color:#273e2b}
 body.drive-view dialog .check{font-size:12px;gap:10px}
 body.drive-view dialog .check input{width:20px;height:20px;flex-shrink:0}
 body.drive-view .dialogbuttons button{min-height:42px}
-@media(max-height:730px) and (orientation:portrait){#driveView{grid-template-rows:40px auto minmax(95px,1fr) minmax(125px,1.3fr) 171px;gap:6px;padding-top:6px;padding-bottom:max(6px,env(safe-area-inset-bottom))}.joystickRow{height:124px}.joystickWrap{width:125px;height:125px}#joystick{width:122px;height:122px}.driveCardHead{min-height:30px;padding-top:3px;padding-bottom:3px}.rangeReadouts{min-height:30px;padding-bottom:5px}.rangeReadouts strong{font-size:13px}.rangeReadouts .forwardDistance strong{font-size:15px}}
+@media(max-height:730px) and (orientation:portrait){#driveView{grid-template-rows:40px auto minmax(110px,1.4fr) minmax(105px,1fr) 171px;gap:6px;padding-top:6px;padding-bottom:max(6px,env(safe-area-inset-bottom))}.joystickRow{height:124px}.joystickWrap{width:125px;height:125px}#joystick{width:122px;height:122px}.driveCardHead{min-height:30px;padding-top:3px;padding-bottom:3px}.rangeReadouts{min-height:30px;padding-bottom:5px}.rangeReadouts strong{font-size:13px}.rangeReadouts .forwardDistance strong{font-size:15px}}
 @media(max-width:800px){body:not(.drive-view) #drivePanel{display:none!important}.brand .openDriveButton{display:block}}
 @media(orientation:landscape) and (max-height:550px){#driveView{max-width:1100px;grid-template-columns:1fr 1fr;grid-template-rows:36px auto minmax(95px,1fr) 130px;gap:5px;padding:5px 10px}.driveHeader,.driveNotice,.touchControls{grid-column:1/-1}.radarCard{grid-column:1;grid-row:3}.cameraCard{grid-column:2;grid-row:3}.touchControls{grid-row:4;flex-direction:row;gap:25px}.joystickRow{height:125px;gap:20px}.joystickWrap,#joystick{width:118px;height:118px}.driveControlFoot{width:180px}.driveCardHead{min-height:27px;padding:3px 9px}.rangeReadouts{min-height:28px;padding-bottom:3px}.rangeReadouts strong{font-size:12px}.rangeReadouts .forwardDistance strong{font-size:14px}}
+
+#driveMapStage{background:#e2ead8;overflow:hidden}#driveMapStage #map{position:absolute;inset:0;width:100%;height:100%;touch-action:none}#driveView .rangeButtons #driveFit{min-width:68px;color:#c7dda6}.rangeReadouts{background:#192b20}
