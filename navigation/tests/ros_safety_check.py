@@ -108,6 +108,31 @@ class ROSMotorInterlockTests(unittest.TestCase):
         r.arm('mapping',True)
         msg=Twist();msg.linear.x=.03;r.velocity(msg)
         self.assertEqual(r.command,[0.,0.,0.])
+    def test_obstacle_blocks_only_motion_towards_it_and_keeps_same_owner(self):
+        r=self.robot;token=r.take_control('mapping')['token'];r.base_points=[(.28,0.)]
+        result=r.manual(token,.03,0.,0.,1)
+        self.assertIn('Hindernis',result['blocked'])
+        self.assertFalse(r.estop);self.assertEqual(r.lease.token,token)
+        self.assertEqual(r.command,[0.,0.,0.]);self.assertFalse(r.pi.sent)
+        r.manual(token,-.02,0.,0.,2)
+        self.assertEqual(r.command,[-.02,0.,0.])
+        r.base_points=[];r.manual(token,.03,0.,0.,3);r.base_points=[(.28,0.)]
+        self.advance();r.tick()
+        self.assertFalse(r.estop);self.assertEqual(r.command,[0.,0.,0.])
+        r.manual(token,-.02,0.,0.,4)
+        self.assertEqual(r.command,[-.02,0.,0.])
+    def test_accepted_manual_packets_refresh_owner_without_separate_heartbeat(self):
+        r=self.robot;token=r.take_control('mapping')['token']
+        for sequence in range(1,31):
+            self.advance(.1);r.manual(token,.01,0.,0.,sequence);r.tick()
+        self.assertFalse(r.estop);self.assertEqual(r.lease.token,token)
+        self.advance(1.3);r.tick()
+        self.assertTrue(r.estop)
+    def test_observed_front_chassis_reflex_is_masked_but_real_front_obstacle_remains(self):
+        from spatial import self_return,obstacle_risk
+        self.assertTrue(self_return(.236,-.012,bridge.CFG))
+        self.assertFalse(self_return(.28,0.,bridge.CFG))
+        self.assertTrue(obstacle_risk([(.28,0.)],bridge.CFG,[.03,0.,0.]))
     def test_no_go_edit_cancels_owner_and_overlays_planner_map(self):
         r=self.robot;r.arm('mapping',True)
         m=OccupancyGrid();m.info.width=m.info.height=80;m.info.resolution=.05

@@ -27,9 +27,9 @@ lidar_y: 0.0
 lidar_z: 0.14
 # Front-box comparison: body front appears at ROS scan +91 deg; cardinal mount +90 deg.
 lidar_yaw: -1.5707963267948966
-# Chassis returns observed up to 3 cm outside nominal outline (near-range error).
+# Repeated self return at body (0.236,-0.012): include 4 cm near-range error.
 # Masked rays stay unknown; Nav2's collision circle includes this padded outline.
-self_filter_padding: 0.03
+self_filter_padding: 0.04
 camera_rotation: 180
 camera_yaw: 0.0
 # Nominal Camera Module v1 field of view; orientation aid, not pixel calibration.

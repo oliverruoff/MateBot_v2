@@ -38,7 +38,7 @@
     const fresh=frameFresh(),s=latest,ready=app.canDrive();
     $('#driveStatusDot').style.background=ready?'#c2dc94':'#d2a35b';
     $('#driveFloorHint').hidden=!s.initial_floor_test;
-    let message=s.manual_blocked||'Bereit · Joystick halten, Loslassen stoppt';
+    let message=s.manual_blocked||s.manual_warning||'Bereit · Joystick halten, Loslassen stoppt';
     if(!s.localized&&s.saved_map)message=s.localization_status||'Position wird automatisch gesucht';
     else if(!fresh)message=cameraEnabled?'Kamera wird verbunden':'Kamera pausiert – Fahren gesperrt';
     else if(s.annotations?.mode==='navigation')message='Fahransicht öffnen: Einlernen wählen';

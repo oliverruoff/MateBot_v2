@@ -95,8 +95,8 @@ def create_app(robot,web_root=None,camera=None):
                 robot.heartbeat(token)
                 return jsonify(ok=True)
             if action=='manual':
-                robot.manual(token,*numbers(data,['vx','vy','wz']),sequence=data.get('sequence'))
-                return jsonify(ok=True)
+                result=robot.manual(token,*numbers(data,['vx','vy','wz']),sequence=data.get('sequence'))
+                return jsonify(result or dict(ok=True))
             if action=='goal':return jsonify(robot.goal(*numbers(data,['x','y']),token=token))
             if action=='restore':return jsonify(robot.restore(*numbers(data,['x','y','yaw'])))
             if action=='save':return jsonify(robot.save_map())

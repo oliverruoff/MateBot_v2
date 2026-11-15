@@ -171,7 +171,7 @@ wurden einzeln aufgebockt bestätigt. Front-Kartonvergleich ergab LiDAR-Yaw `-pi
 200 Schritte/Umdrehung, 32 Mikroschritte und 79 mm Räder stammen aus der bisherigen
 Hardwarebeschreibung; ihre reale Fahrstrecke ist noch am Boden zu prüfen.
 
-Chassis-Nahreflexionen innerhalb der Kontur plus 3 cm werden als unbekannte
+Chassis-Nahreflexionen innerhalb der Kontur plus 4 cm werden als unbekannte
 Laserstrahlen behandelt, niemals als Freiraum. Der konservative Nav2-Kreis
 umschließt diese Fläche. Der MPU6050 misst die Z-Achse (Register 0x47); sein Bias
 wird bei stillstehendem Start neu bestimmt.
@@ -216,3 +216,17 @@ sein. Diese Tests wurden während der ersten Einrichtung mit dem Besitzer benutz
 `config/slam.upstream.yaml`: `SteveMacenski/slam_toolbox`, Jazzy,
 `config/mapper_params_online_async.yaml`, LGPL-2.1. Original-Lizenztexte sind
 beigefügt. `configure.py` erzeugt die für dieses Fahrzeug abgeleiteten Parameter.
+
+### Manuelles Fahren bei Hindernissen
+
+Ein wiederholt beobachteter Eigenreflex vorne bei (0,236 m, −0,012 m) liegt
+innerhalb der 4-cm-Chassismaske und wird als unbekannter Strahl ausgefiltert.
+Der Navigationsradius umschließt weiterhin die gesamte maskierte Kontur.
+Ein echtes Hindernis stoppt nur die betroffene manuelle Fahrtrichtung; die
+Steuerungskennung bleibt erhalten, damit Rückwärts-/Seitwärts-Ausweichen möglich
+ist. Der nächste aktuelle Fahrbefehl wird erneut gegen die Messung geprüft.
+Akzeptierte Fahrpakete erneuern selbst die 1,2-s-Verbindung; separate Heartbeats
+halten sie auch im Stillstand. Der Browser begrenzt bewegende Anfragen auf eine
+laufende Anfrage, sendet Loslassen sofort mit höherer Sequenznummer und ignoriert
+Fehler aus bereits überholten Steuerungssitzungen. Ohne neue Fahrpakete bleibt
+der bisherige 250-ms-Motorstopp unverändert.

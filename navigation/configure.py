@@ -16,7 +16,8 @@ def generate(output_dir=Path('/data')):
     # Circumscribed circle is deliberately conservative, including during rotation.
     for key in ('local_costmap', 'global_costmap'):
         p = nav[key][key]['ros__parameters']
-        p['robot_radius'] = radius + 0.05
+        padding=cfg.get('self_filter_padding',0.)
+        p['robot_radius'] = max(radius+0.05,math.hypot(cfg['footprint_length']/2+padding,cfg['footprint_width']/2+padding))
         p['inflation_layer']['inflation_radius'] = radius + 0.30
         layer = p.get('voxel_layer', p.get('obstacle_layer'))
         layer['scan'].update(raytrace_max_range=10.0, obstacle_max_range=8.0,

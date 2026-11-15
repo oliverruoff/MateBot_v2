@@ -6,13 +6,13 @@ let selected=null,drag=null,token=null,armedAt=0,lastOK=0,manualTimer=null,seque
 const keys=new Set();
 const manualInputs=new Map();
 const mapHome=canvas.parentElement;
-let controlRequest=null,controlEpoch=0;
+let controlRequest=null,controlEpoch=0,manualFlight=null;
 
 function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,5500)}
 async function api(action,body={}){
   const headers={'Content-Type':'application/json','X-Matebot-Control':'1'};
   if(token)headers['X-Matebot-Lease']=token;
-  const response=await fetch('/api/'+action,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(35000)});
+  const response=await fetch('/api/'+action,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(['manual','heartbeat','take-control','stop'].includes(action)?1200:35000)});
   let value;try{value=await response.json()}catch{throw Error('Keine gültige Antwort vom Roboter')}
   if(!response.ok)throw Error(value.error||'Aktion fehlgeschlagen');
   return value;
@@ -136,10 +136,17 @@ async function ensureControl(mode='mapping'){
 }
 function inputVector(){return MatebotDrive.combine([...manualInputs.values()],Number($('#speed').value)/100,Math.min(.1,state.manual_limits?.[1]||.1))}
 function sendManualInput(){
-  const [vx,vy,wz]=inputVector();
-  const moving=!!(vx||vy||wz);
-  if(moving){if(!canDrive()){endManual();return}}
-  if(token)api('manual',{vx,vy,wz,sequence:++sequence}).catch(e=>{if(moving){endManual();toast(e.message)}});
+  const [vx,vy,wz]=inputVector(),moving=!!(vx||vy||wz);
+  if(moving&&!canDrive()){endManual();return}
+  if(!token||(moving&&manualFlight))return;
+  const owner=token,epoch=controlEpoch;
+  const request=api('manual',{vx,vy,wz,sequence:++sequence});
+  if(moving)manualFlight=request;
+  request.catch(e=>{
+    if(moving&&token===owner&&controlEpoch===epoch){
+      token=null;endManual();api('stop').catch(()=>{});toast('Fahrt angehalten: '+e.message);
+    }
+  }).finally(()=>{if(manualFlight===request)manualFlight=null});
 }
 function syncManual(){
   const moving=inputVector().some(v=>Math.abs(v)>1e-6);
@@ -214,7 +221,7 @@ window.addEventListener('keydown',e=>{
 window.addEventListener('keyup',e=>{const key=e.key.toLowerCase();if(!keys.has(key))return;keys.delete(key);const v=keyboardVector();if(v.some(Boolean))startManual(v,'keyboard');else endManual('keyboard')});
 window.addEventListener('blur',()=>{endManual();if(token)stop().catch(()=>{})});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){endManual();if(token)stop().catch(()=>{})}});
-setInterval(()=>{if(token&&!document.hidden&&Date.now()-lastOK<1000)api('heartbeat').catch(()=>{token=null;endManual();toast('Verbindung abgelaufen – Joystick erneut betätigen')})},400);
+setInterval(()=>{if(token&&!document.hidden){const owner=token;api('heartbeat').catch(()=>{if(token===owner){token=null;endManual();toast('Verbindung unterbrochen – Joystick erneut betätigen')}})}},400);
 window.MatebotApp={api,stop,startManual,endManual,canDrive,toast,state:()=>state,ownsControl:()=>!!token,
   setSpeed:value=>{const v=String(value);$('#speed').value=v;$('#speedValue').textContent=v+' cm/s'},
   ensureMapping:async()=>{if(state.annotations?.mode!=='mapping'){await stop();state.annotations=await api('settings',{mode:'mapping'});annotationRevision=-1;tool='mapping';renderAnnotations();renderState()}},

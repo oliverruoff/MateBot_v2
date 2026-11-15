@@ -5,6 +5,21 @@ Original software, its modified files and logs remain intact. Pre-change archive
 are stored under `/home/matebot/backups/`. No credentials or floor-plan data are
 included in the source repository.
 
+## Manual control interruption fix
+
+- Live stationary sampling reproduced a sporadic self return at body (0.236,-0.012)
+  that alternated between absent and present and blocked forward/CCW motion.
+  Other nearby points were around (-0.14,0.35). The self-filter padding now covers
+  this chassis return (4 cm); generated Nav2 radius encloses the padded rectangle.
+- Manual obstacle rejection returns a directional warning and zero motor output,
+  preserving ownership. The tick-time guard behaves the same way in mapping mode.
+  Real obstacles remain blocked, while retreat works with the same token.
+- Accepted manual packets refresh ownership. The UI coalesces moving requests,
+  gives zero commands immediate priority, and ignores errors from superseded owners.
+- Nine isolated ROS/fake-GPIO tests pass, including the observed self return,
+  real-obstacle blocking, retreat without rearming, and continued ownership from
+  manual packets alone followed by a real timeout when packets stop.
+
 ## Direct driving, live map and automatic localization (update)
 
 - Manual pulse limiting is disabled in configuration. Six isolated ROS tests with

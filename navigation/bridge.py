@@ -77,7 +77,8 @@ class Bridge(Node):
         self.goal_pending = False
         self.goal_generation = 0
         self.goal_status = 'Bereit'
-        self.stop_reason='Gestoppt – Steuerung vor Ort freigeben'
+        self.stop_reason='Gestoppt'
+        self.manual_warning=''
         self.error = ''
         self.saved_at = self.read_runtime().get('saved_at')
         self.gyro_bias = None
@@ -218,7 +219,7 @@ class Bridge(Node):
 
     def manual(self,token,vx,vy,wz,sequence=None):
         with self.lock:
-            self.lease.check(token,time.monotonic())
+            self.lease.check(token,time.monotonic(),refresh=True)
             if type(sequence) is not int or sequence<0 or sequence>2**53:
                 raise ValueError('Ungültige Befehlsfolge')
             if sequence<=self.last_manual_sequence:return
@@ -226,6 +227,7 @@ class Bridge(Node):
             if self.annotations['mode']!='mapping':raise ValueError('Manuelle Steuerung nur im Einlernmodus')
             if not all(math.isfinite(v) for v in (vx,vy,wz)):raise ValueError('Ungültige Geschwindigkeit')
             if not any((vx,vy,wz)):
+                self.manual_warning=''
                 self.command=[0.,0.,0.]
                 self.applied_cmd=[0.,0.,0.]
                 self.burst_pulses=0
@@ -233,7 +235,14 @@ class Bridge(Node):
                 self.stop_hardware()
                 return
             reason=self.readiness(cmd=[vx,vy,wz])
+            if reason=='Hindernis im Fahrweg – gestoppt':
+                self.command=[0.,0.,0.]
+                self.applied_cmd=[0.,0.,0.]
+                self.manual_warning='Hindernis in dieser Fahrtrichtung · andere Richtung möglich'
+                self.stop_hardware()
+                return dict(ok=True,blocked=self.manual_warning)
             if reason:raise ValueError(reason)
+            self.manual_warning=''
             if self.burst_exhausted:raise ValueError('Prüfimpuls beendet – loslassen und erneut drücken')
             if math.hypot(vx,vy)>CFG['manual_max_linear_speed']+.00001 or abs(wz)>CFG['manual_max_angular_speed']+.00001:
                 raise ValueError('Geschwindigkeit zu hoch')
@@ -329,6 +338,7 @@ class Bridge(Node):
         with self.lock:
             self.estop = True
             self.stop_reason=reason
+            self.manual_warning=''
             self.lease.clear()
             self.goal_generation += 1
             self.command = [0., 0., 0.]
@@ -371,7 +381,12 @@ class Bridge(Node):
                 self.stop('Verbindung zur Steuerung abgelaufen – gestoppt')
             if not self.estop:
                 reason=self.reason()
-                if reason:self.stop(reason)
+                if reason=='Hindernis im Fahrweg – gestoppt' and self.annotations['mode']=='mapping':
+                    self.command=[0.,0.,0.]
+                    self.applied_cmd=[0.,0.,0.]
+                    self.manual_warning='Hindernis in dieser Fahrtrichtung · andere Richtung möglich'
+                    self.stop_hardware()
+                elif reason:self.stop(reason)
             cmd = list(self.command)
             if self.reason() or now-self.cmd_at > 0.25:
                 cmd = [0., 0., 0.]
@@ -600,6 +615,7 @@ class Bridge(Node):
                         self_points=self.self_points, last_pose=self.read_runtime().get('pose'),
                         initial_floor_test=CFG.get('floor_test_enabled',False) and not self.annotations['calibration']['translation'],
                         manual_blocked=self.readiness('mapping',include_stop=False),
+                        manual_warning=getattr(self,'manual_warning',''),
                         localization_status=getattr(self,'localization_status',''),
                         manual_limits=[CFG['manual_max_linear_speed'],CFG['manual_max_angular_speed']],
                         camera_view=dict(yaw=CFG.get('camera_yaw',0.),horizontal_fov=CFG.get('camera_horizontal_fov',53.5)),
