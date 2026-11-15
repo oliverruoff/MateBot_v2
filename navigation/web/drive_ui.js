@@ -32,14 +32,14 @@
     const scan=points();
     distance('#distanceLeft',math.sectorDistance(scan,45,15));distance('#distanceFront',math.sectorDistance(scan,0,12));distance('#distanceRight',math.sectorDistance(scan,-45,15));
     $('#lidarStale').hidden=latest.lidar_age<.5;
-    $('#driveMapStatus').textContent=latest.localized?'LIVE · SLAM':'ORTUNG LÄUFT';
+    $('#driveMapStatus').textContent=latest.localized?'LIVE · VORNE ↑':'ORTUNG LÄUFT';
   }
   function renderStatus(){
     const fresh=frameFresh(),s=latest,ready=app.canDrive();
     $('#driveStatusDot').style.background=ready?'#c2dc94':'#d2a35b';
     $('#driveFloorHint').hidden=!s.initial_floor_test;
     let message=s.manual_blocked||s.manual_warning||'Bereit · Joystick halten, Loslassen stoppt';
-    if(!s.localized&&s.saved_map)message=s.localization_status||'Position wird automatisch gesucht';
+    if(!s.localized&&s.saved_map)message=s.manual_blocked||'Ortung im Hintergrund · manuelles Fahren bereit';
     else if(!fresh)message=cameraEnabled?'Kamera wird verbunden':'Kamera pausiert – Fahren gesperrt';
     else if(s.annotations?.mode==='navigation')message='Fahransicht öffnen: Einlernen wählen';
     $('#driveNoticeText').textContent=message;
@@ -124,9 +124,9 @@
   $('#drivePosition').onclick=()=>{setView('map');app.selectPosition()};
   $('#cameraToggle').onclick=()=>{cameraEnabled=!cameraEnabled;$('#cameraToggle').textContent=cameraEnabled?'Pause':'Verbinden';if(!cameraEnabled){cameraRequest?.abort();clearTimeout(cameraTimer);if(app.ownsControl())app.stop().catch(()=>{})}else{lastSequence=-1;frameAt=0;startCamera()}renderStatus()};
   $('#driveFit').onclick=()=>{followMap=true;app.fitMap()};
-  $('#driveZoomIn').onclick=()=>{followMap=false;app.zoomMap(1.3)};
-  $('#driveZoomOut').onclick=()=>{followMap=false;app.zoomMap(1/1.3)};
-  $('#driveMapStage').addEventListener('pointerdown',()=>followMap=false);
+  $('#driveZoomIn').onclick=()=>{if(followMap)app.freezeMap();followMap=false;app.zoomMap(1.3)};
+  $('#driveZoomOut').onclick=()=>{if(followMap)app.freezeMap();followMap=false;app.zoomMap(1/1.3)};
+  $('#driveMapStage').addEventListener('pointerdown',()=>{if(followMap)app.freezeMap();followMap=false},true);
   document.addEventListener('visibilitychange',()=>{if(document.hidden){cameraRequest?.abort();clearTimeout(cameraTimer)}else startCamera()});
   window.addEventListener('pagehide',()=>{cameraRequest?.abort();clearTimeout(cameraTimer)});
   window.MatebotCockpit={visible,frameFresh,resetControls,followMap:()=>visible()&&followMap,

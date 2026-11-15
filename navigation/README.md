@@ -13,8 +13,8 @@ Checkout bleibt erhalten; die laufende Installation liegt unter
 Oben zeigt die Fahransicht dieselbe echte SLAM-Hauskarte wie die große
 Kartenansicht: Wände, bekannte freie Flächen, Sperrzonen, Roboterposition und
 aktuelle Laserpunkte. Neue Kartenstände erscheinen laufend (SLAM etwa alle zwei
-Sekunden). Die Karte bleibt am Haus ausgerichtet; der Roboterpfeil zeigt seine
-Blickrichtung. **Ganzes Haus** passt die wachsende Karte automatisch ein, +/−
+Sekunden). In der Fahransicht zeigt der Roboter immer nach oben; die Karte samt
+Laserpunkten dreht sich um ihn. Die große Kartenansicht bleibt am Haus ausgerichtet. **Ganzes Haus** passt die wachsende Karte automatisch ein, +/−
 zoomen, Ziehen verschiebt. Die drei zusätzlichen Entfernungen beziehen sich auf
 den LiDAR, nicht auf den freien Abstand zur Stoßstange.
 
@@ -26,7 +26,7 @@ Karte, ein Hintergrund-Tab oder **STOPP** beenden die Bedienung. Ein über 1,2 s
 nicht erneuertes Kamerabild stoppt die Fahransicht und sperrt ihre Steuerung.
 Ein neuer bewusster Joystick- oder Tastendruck übernimmt die Steuerung automatisch.
 Es gibt keinen Freigabedialog. Die manuelle Fahrt läuft während des Haltens
-kontinuierlich mit maximal 3 cm/s und 0,1 rad/s; die frühere 160-Schritte-
+kontinuierlich mit standardmäßig 6 cm/s, einstellbar 2–12 cm/s und bis 0,4 rad/s; die frühere 160-Schritte-
 Impulsbegrenzung ist ausgeschaltet. Der Zielmodus behält seine vier Bodenprüfungen.
 
 Die CSI-Kamera liefert 640 × 360 mit bis zu 12 Bildern/s; im Browser wurden 8–10
@@ -177,10 +177,11 @@ umschließt diese Fläche. Der MPU6050 misst die Z-Achse (Register 0x47); sein B
 wird bei stillstehendem Start neu bestimmt.
 
 Eine kurzlebige Steuerungskennung gehört genau einem Browser. Andere Leser
-verlängern sie nicht. Ohne Heartbeat wird nach 1,2 s gestoppt; manuelle Befehle
-verfallen nach 250 ms. Sequenznummern verhindern, dass verspätete Fahrbefehle ein
-Loslassen überholen. Jede Motor-Welle endet spätestens nach 80 ms, selbst wenn
-der Prozess stirbt. Stale Sensoren, ungültige Position, Hindernisse und Sperrzonen
+verlängern sie nicht. Die Steuerungskennung verfällt nach 2,5 s ohne gültiges Paket; manuelle
+Bewegungsbefehle verfallen bereits nach 500 ms. Sequenznummern verhindern, dass verspätete Fahrbefehle ein
+Loslassen überholen. Die DMA-Ansteuerung reiht 80-ms-Motorwellen synchron aneinander, mit höchstens
+einem vorbereiteten Nachfolger. Stirbt der Prozess, endet die Ausgabe nach
+spätestens etwa 160 ms. Stale Sensoren, ungültige Position, Hindernisse und Sperrzonen
 sperren die Ausgabe. Diese Software ersetzt keinen physischen Not-Aus.
 
 ## Prüfungen
@@ -225,8 +226,20 @@ Der Navigationsradius umschließt weiterhin die gesamte maskierte Kontur.
 Ein echtes Hindernis stoppt nur die betroffene manuelle Fahrtrichtung; die
 Steuerungskennung bleibt erhalten, damit Rückwärts-/Seitwärts-Ausweichen möglich
 ist. Der nächste aktuelle Fahrbefehl wird erneut gegen die Messung geprüft.
-Akzeptierte Fahrpakete erneuern selbst die 1,2-s-Verbindung; separate Heartbeats
+Akzeptierte Fahrpakete erneuern selbst die 2,5-s-Verbindung; separate Heartbeats
 halten sie auch im Stillstand. Der Browser begrenzt bewegende Anfragen auf eine
 laufende Anfrage, sendet Loslassen sofort mit höherer Sequenznummer und ignoriert
 Fehler aus bereits überholten Steuerungssitzungen. Ohne neue Fahrpakete bleibt
-der bisherige 250-ms-Motorstopp unverändert.
+der bisherige 500-ms-Motorstopp unverändert.
+
+### Lastverteilung und manuelle Ortung
+
+Der Motortakt läuft in einem eigenen 20-ms-Thread, unabhängig vom ROS-Executor.
+SLAM bleibt beim Einlernen aktiv. Nav2 wird erst im geprüften Zielmodus gestartet
+und beim Wechsel zurück beendet, statt während der Handsteuerung unnötig CPU zu
+belegen. Statusabrufe warten nicht mehr auf den größeren Kartenabruf.
+Eine veraltete globale Kartenposition sperrt die Handsteuerung nur, wenn gespeicherte
+Sperrzonen von dieser Position abhängen; LiDAR-, IMU- und Hinderniswächter gelten
+weiter. Die autonome Navigation erfordert immer eine gültige Kartenposition.
+Ein einzelner fehlgeschlagener Heartbeat verwirft keine ansonsten durch aktuelle
+Fahrpakete bestätigte Sitzung.

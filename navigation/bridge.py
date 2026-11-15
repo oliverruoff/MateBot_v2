@@ -8,6 +8,7 @@ import math
 import os
 from pathlib import Path
 import signal
+import subprocess
 import statistics
 import threading
 import time
@@ -31,10 +32,11 @@ from waitress import serve
 from PIL import Image
 
 from core import LD19, wheels, finite_wave
-from session import Session, ControlLease, atomic_json
+from session import Session, ControlLease, atomic_json, LEASE_TIMEOUT
 from spatial import overlay_indices, zone_collision, laser_to_base, self_return, obstacle_risk, sweep_hits_zones
 from api import create_app
 from localization import ScanMatcher, angle_delta
+from wave_driver import WaveDriver
 
 ROOT = Path(__file__).parent
 DATA = Path('/data')
@@ -101,6 +103,7 @@ class Bridge(Node):
             raise RuntimeError('pigpiod nicht erreichbar; kein Simulations-Fallback')
         for p in CFG['step_pins'] + CFG['direction_pins'] + [CFG['enable_pin']]:
             self.pi.set_mode(p, pigpio.OUTPUT)
+        self.wave_driver=WaveDriver(self.pi,CFG,pigpio.pulse)
         self.stop_hardware()
         self.tf = TransformBroadcaster(self)
         self.buffer = Buffer()
@@ -118,12 +121,41 @@ class Bridge(Node):
         self.serialize = self.create_client(SerializePoseGraph, '/slam_toolbox/serialize_map')
         self.deserialize = self.create_client(DeserializePoseGraph, '/slam_toolbox/deserialize_map')
         self.reset_client=self.create_client(Reset,'/slam_toolbox/reset')
-        self.create_timer(0.05, self.tick)
+        threading.Thread(target=self.motor_loop,daemon=True).start()
         self.create_timer(0.25, self.update_pose)
         threading.Thread(target=self.lidar_loop, daemon=True).start()
         threading.Thread(target=self.imu_loop, daemon=True).start()
         threading.Thread(target=self.autosave_loop, daemon=True).start()
         threading.Thread(target=self.localization_loop, daemon=True).start()
+        threading.Thread(target=self.navigation_loop,daemon=True).start()
+
+    def motor_loop(self):
+        while self.running:
+            started=time.monotonic()
+            try:self.tick()
+            except Exception as exc:
+                self.error='Motor: '+str(exc);self.stop(self.error)
+            time.sleep(max(.002,.02-(time.monotonic()-started)))
+
+    def navigation_loop(self):
+        process=None
+        try:
+            while self.running:
+                wanted=self.annotations['mode']=='navigation' and self.navigation_ready()
+                if wanted and process is None:
+                    process=subprocess.Popen(['ros2','launch','nav2_bringup','navigation_launch.py',
+                        'params_file:=/data/nav2.yaml','use_sim_time:=false','autostart:=true','use_composition:=False'],start_new_session=True)
+                elif not wanted and process is not None:
+                    os.killpg(process.pid,signal.SIGINT)
+                    try:process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+                    process=None
+                if process is not None and process.poll() is not None:
+                    process=None
+                time.sleep(1)
+        finally:
+            if process is not None and process.poll() is None:
+                os.killpg(process.pid,signal.SIGINT)
 
     def navigation_ready(self):
         return all(self.annotations['calibration'].values())
@@ -316,8 +348,9 @@ class Bridge(Node):
         if include_stop and self.estop:return self.stop_reason
         if now-self.scan_at>.4 or self.valid_points<80:return 'LiDAR nicht bereit'
         if now-self.imu_at>.4:return 'IMU nicht bereit'
-        if not self.localized:return getattr(self,'localization_status','Position wird automatisch gesucht')
-        if not self.pose or self.pose.get('age',99)>.5:return 'Roboterposition nicht aktuell'
+        if mode=='navigation' or self.zones:
+            if not self.localized:return getattr(self,'localization_status','Position wird automatisch gesucht')
+            if not self.pose or self.pose.get('age',99)>1.:return 'Roboterposition nicht aktuell'
         if sweep_hits_zones(self.pose,cmd or [0.,0.,0.],CFG,self.zones,self.annotations['grid_size']):
             return 'Sperrzone: Roboter oder Fahrweg überschneidet rote Zellen'
         if cmd and obstacle_risk(self.base_points,CFG,cmd):return 'Hindernis im Fahrweg – gestoppt'
@@ -327,11 +360,14 @@ class Bridge(Node):
         return self.readiness(cmd=self.command)
 
     def stop_hardware(self):
+        if getattr(self,'hardware_stopped',False) and not getattr(getattr(self,'wave_driver',None),'records',[]):return
+        if hasattr(self,'wave_driver'):self.wave_driver.stop(time.monotonic())
         self.pi.wave_tx_stop()
         for p in CFG['step_pins']:
             self.pi.set_PWM_dutycycle(p, 0)
             self.pi.write(p, 0)
         self.pi.write(CFG['enable_pin'], 1 if CFG['enable_active_low'] else 0)
+        self.hardware_stopped=True
         self.wave_velocity = [0., 0., 0.]
 
     def stop(self,reason='Gestoppt'):
@@ -377,7 +413,7 @@ class Bridge(Node):
             now = time.monotonic()
             dt = min(now-self.last_tick, 0.15)
             self.last_tick = now
-            if not self.estop and now-self.lease.at>1.2:
+            if not self.estop and now-self.lease.at>LEASE_TIMEOUT:
                 self.stop('Verbindung zur Steuerung abgelaufen – gestoppt')
             if not self.estop:
                 reason=self.reason()
@@ -388,11 +424,11 @@ class Bridge(Node):
                     self.stop_hardware()
                 elif reason:self.stop(reason)
             cmd = list(self.command)
-            if self.reason() or now-self.cmd_at > 0.25:
+            if self.reason() or now-self.cmd_at > 0.50:
                 cmd = [0., 0., 0.]
                 self.applied_cmd = [0., 0., 0.]
             elif any(abs(v)>0.001 for v in cmd):
-                limits=[0.12*dt,0.12*dt,0.25*dt]
+                limits=[0.3*dt,0.3*dt,0.8*dt]
                 cmd=[old+max(-limit,min(limit,target-old))
                      for old,target,limit in zip(self.applied_cmd,cmd,limits)]
                 self.applied_cmd=list(cmd)
@@ -400,15 +436,26 @@ class Bridge(Node):
                 self.applied_cmd = [0., 0., 0.]
             # IMU supplies heading; commanded steps estimate translation only.
             # Integrate only the active part of finite wave trains, excluding idle gaps.
-            elapsed = max(0., min(now-self.wave_started, 0.08))
-            active_dt = max(0., elapsed-self.wave_integrated)
-            self.wave_integrated = elapsed
-            vx, vy, wz = self.wave_velocity
-            self.x += (vx*math.cos(self.heading)-vy*math.sin(self.heading))*active_dt
-            self.y += (vx*math.sin(self.heading)+vy*math.cos(self.heading))*active_dt
+            if not CFG.get('floor_test_enabled',False):
+                mx,my,_=self.wave_driver.take_motion(now)
+                self.x+=mx*math.cos(self.heading)-my*math.sin(self.heading)
+                self.y+=mx*math.sin(self.heading)+my*math.cos(self.heading)
+                vx,vy,wz=self.applied_cmd
+            else:
+                elapsed=max(0.,min(now-self.wave_started,.08))
+                active_dt=max(0.,elapsed-self.wave_integrated);self.wave_integrated=elapsed
+                vx,vy,wz=self.wave_velocity
+                self.x+=(vx*math.cos(self.heading)-vy*math.sin(self.heading))*active_dt
+                self.y+=(vx*math.sin(self.heading)+vy*math.cos(self.heading))*active_dt
             try:
                 if any(abs(v) > 0.001 for v in cmd):
-                    if not self.pi.wave_tx_busy():
+                    self.hardware_stopped=False
+                    if not CFG.get('floor_test_enabled',False):
+                        steps_m=CFG['steps_per_revolution']*CFG['microsteps']/(math.pi*CFG['wheel_diameter'])
+                        hz=[v*steps_m for v in wheels(*cmd,CFG['wheelbase'],CFG['track_width'])]
+                        factor=min(1.,4800/max(max(abs(h) for h in hz),1.))
+                        self.wave_driver.pump([h*factor for h in hz],[v*factor for v in cmd],now)
+                    elif not self.pi.wave_tx_busy():
                         if self.last_wave >= 0:
                             self.pi.wave_delete(self.last_wave)
                             self.last_wave = -1
@@ -448,6 +495,8 @@ class Bridge(Node):
             except Exception as exc:
                 self.error = str(exc)
                 self.stop()
+            if now<getattr(self,'next_odom',0.):return
+            self.next_odom=now+.045
             stamp = self.get_clock().now().to_msg()
             tf = TransformStamped()
             tf.header.stamp = stamp
@@ -616,6 +665,7 @@ class Bridge(Node):
                         initial_floor_test=CFG.get('floor_test_enabled',False) and not self.annotations['calibration']['translation'],
                         manual_blocked=self.readiness('mapping',include_stop=False),
                         manual_warning=getattr(self,'manual_warning',''),
+                        motion_diagnostics=dict(waves=self.wave_driver.starts,underruns=self.wave_driver.underruns),
                         localization_status=getattr(self,'localization_status',''),
                         manual_limits=[CFG['manual_max_linear_speed'],CFG['manual_max_angular_speed']],
                         camera_view=dict(yaw=CFG.get('camera_yaw',0.),horizontal_fov=CFG.get('camera_horizontal_fov',53.5)),

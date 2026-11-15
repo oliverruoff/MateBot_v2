@@ -21,10 +21,6 @@ def generate_launch_description():
             get_package_share_directory('slam_toolbox') + '/launch/online_async_launch.py'),
             launch_arguments={'slam_params_file': '/data/slam.yaml',
                               'use_sim_time': 'false', 'autostart': 'true'}.items())]),
-        IncludeLaunchDescription(PythonLaunchDescriptionSource(
-            get_package_share_directory('nav2_bringup') + '/launch/navigation_launch.py'),
-            launch_arguments={'params_file': '/data/nav2.yaml', 'use_sim_time': 'false',
-                              'autostart': 'true', 'use_composition': 'False'}.items()),
         # Launch a plain Python ROS node without a separate colcon build.
         bridge,
     ])

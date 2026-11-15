@@ -8,6 +8,8 @@ import threading
 import time
 import uuid
 
+LEASE_TIMEOUT=2.5
+
 GRID_SIZES=(0.1,0.25,0.5,1.0)
 MAX_CELLS=30000
 
@@ -168,14 +170,14 @@ class ControlLease:
         self.at=0.
 
     def acquire(self,now):
-        if self.token and now-self.at<1.2:
+        if self.token and now-self.at<LEASE_TIMEOUT:
             raise ValueError('Eine andere Steuerung ist noch aktiv. Erst stoppen.')
         self.token=uuid.uuid4().hex
         self.at=now
         return self.token
 
     def check(self,token,now,refresh=False):
-        if not token or token!=self.token or now-self.at>1.2:
+        if not token or token!=self.token or now-self.at>LEASE_TIMEOUT:
             raise ValueError('Steuerung abgelaufen. Bitte erneut freigeben.')
         if refresh:self.at=now
 

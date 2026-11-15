@@ -17,11 +17,12 @@
       const bx=lx+x*c-y*s,by=ly+x*s+y*c;return [bx*ca+by*sa,-bx*sa+by*ca];
     });
   }
+  function rotatePoint(x,y,a){return [x*Math.cos(a)-y*Math.sin(a),x*Math.sin(a)+y*Math.cos(a)]}
   function projectPoint(point,cx,baseY,scale){return [cx-point[1]*scale,baseY-point[0]*scale]}
   function sectorDistance(points,angle,halfAngle=12){
     const values=points.filter(([x,y])=>x>0&&Math.abs(Math.atan2(y,x)*180/Math.PI-angle)<=halfAngle).map(p=>Math.hypot(...p));
     return values.length?Math.min(...values):null;
   }
-  const api={stickVector,combine,cameraPoints,projectPoint,sectorDistance};
+  const api={rotatePoint,stickVector,combine,cameraPoints,projectPoint,sectorDistance};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.MatebotDrive=api;
 })(globalThis);

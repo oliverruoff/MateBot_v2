@@ -1,5 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const math=require('../web/drive_math.js');
+
+test('heading-up view keeps robot forward up and coordinate transforms invertible',()=>{
+  for(const heading of [-2,-.7,0,1,Math.PI]){
+    const rotation=Math.PI/2-heading;
+    const forward=math.rotatePoint(Math.cos(heading),Math.sin(heading),rotation);
+    assert.ok(Math.abs(forward[0])<1e-10);assert.ok(Math.abs(forward[1]-1)<1e-10);
+    const p=math.rotatePoint(2,-3,rotation),q=math.rotatePoint(...p,-rotation);
+    assert.ok(Math.abs(q[0]-2)<1e-10&&Math.abs(q[1]+3)<1e-10);
+  }
+});
 test('joystick forward, reverse and turning signs',()=>{
   assert.deepEqual(math.stickVector(0,0),[0,0,0]);
   assert.deepEqual(math.stickVector(.02,.02),[0,0,0]);

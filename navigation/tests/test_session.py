@@ -91,11 +91,11 @@ class LeaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):lease.acquire(10.8)
         lease.check(token,10.8,refresh=True)
         lease.check(token,11.8)
-        with self.assertRaises(ValueError):lease.check(token,12.1)
-        new=lease.acquire(12.2)
+        with self.assertRaises(ValueError):lease.check(token,13.4)
+        new=lease.acquire(13.5)
         self.assertNotEqual(new,token)
         lease.clear()
-        with self.assertRaises(ValueError):lease.check(new,12.3)
+        with self.assertRaises(ValueError):lease.check(new,13.6)
 
 
 if __name__=='__main__':unittest.main()

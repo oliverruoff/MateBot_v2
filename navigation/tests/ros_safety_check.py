@@ -29,6 +29,8 @@ class FakeGPIO:
     def set_PWM_dutycycle(self,*_):pass
     def write(self,pin,value):self.pins[pin]=value
     def wave_tx_busy(self):return False
+    def wave_tx_at(self):return 9999
+    def wave_send_using_mode(self,wave,mode):self.wave_send_once(wave)
     def wave_delete(self,*_):pass
     def wave_add_generic(self,pulses):self.pending=pulses
     def wave_create(self):return 1
@@ -50,7 +52,7 @@ class Harness(bridge.Bridge):
         self.goal_generation=0;self.goal_status='Bereit';self.path=[];self.error=''
         self.wave_velocity=[0.,0.,0.];self.wave_started=0.;self.wave_integrated=0.
         self.x=self.y=self.heading=0.;self.last_tick=now-.05;self.cmd_at=now;self.last_wave=-1
-        self.pi=FakeGPIO();self.tf=Output();self.odom_pub=Output();self.scan_pub=Output();self.map_pub=Output()
+        self.pi=FakeGPIO();self.wave_driver=bridge.WaveDriver(self.pi,bridge.CFG,bridge.pigpio.pulse);self.tf=Output();self.odom_pub=Output();self.scan_pub=Output();self.map_pub=Output()
         self.map=None;self.map_version=0;self.scan_count=0
 
 
@@ -85,7 +87,7 @@ class ROSMotorInterlockTests(unittest.TestCase):
         self.assertFalse(r.burst_exhausted)
     def test_lost_owner_stops_even_while_other_readers_poll(self):
         r=self.robot;token=r.arm('mapping',True)['token'];r.manual(token,.01,0.,0.,1);r.tick()
-        self.advance(1.3);r.tick()
+        self.advance(2.6);r.tick()
         self.assertTrue(r.estop);self.assertIsNone(r.lease.token)
         self.assertEqual(r.pi.pins[bridge.CFG['enable_pin']],1)
         self.assertTrue(all(r.pi.pins[pin]==0 for pin in bridge.CFG['step_pins']))
@@ -126,8 +128,19 @@ class ROSMotorInterlockTests(unittest.TestCase):
         for sequence in range(1,31):
             self.advance(.1);r.manual(token,.01,0.,0.,sequence);r.tick()
         self.assertFalse(r.estop);self.assertEqual(r.lease.token,token)
-        self.advance(1.3);r.tick()
+        self.advance(2.6);r.tick()
         self.assertTrue(r.estop)
+    def test_manual_does_not_depend_on_global_pose_without_keepouts(self):
+        r=self.robot;r.localized=False;r.pose=None
+        token=r.take_control('mapping')['token'];r.manual(token,.06,0.,0.,1)
+        self.assertEqual(r.command,[.06,0.,0.])
+        r.stop();r.zones={(20,20)}
+        with self.assertRaises(ValueError):r.take_control('mapping')
+    def test_command_watchdog_stops_before_lease_expires(self):
+        r=self.robot;token=r.take_control('mapping')['token'];r.manual(token,.06,0.,0.,1);r.tick()
+        self.advance(.6);r.tick()
+        self.assertFalse(r.estop);self.assertEqual(r.applied_cmd,[0.,0.,0.])
+        self.assertTrue(all(r.pi.pins[p]==0 for p in bridge.CFG['step_pins']))
     def test_observed_front_chassis_reflex_is_masked_but_real_front_obstacle_remains(self):
         from spatial import self_return,obstacle_risk
         self.assertTrue(self_return(.236,-.012,bridge.CFG))

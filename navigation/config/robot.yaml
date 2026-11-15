@@ -1,8 +1,8 @@
 # Measured geometry and wheel directions MUST be verified before motion is enabled.
 motion_verified: false
 manual_ready: true
-manual_max_linear_speed: 0.03
-manual_max_angular_speed: 0.10
+manual_max_linear_speed: 0.12
+manual_max_angular_speed: 0.40
 # Before distance calibration: at most 160 pulses per wheel per held command.
 floor_test_pulse_limit: 160
 floor_test_enabled: false

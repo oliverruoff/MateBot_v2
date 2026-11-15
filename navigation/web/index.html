@@ -18,7 +18,7 @@
     <div class="joystickRow"><button class="strafeButton" id="strafeLeft" disabled><span>⇤</span><strong>LINKS</strong><small>versetzen</small></button>
       <div class="joystickWrap"><div id="joystick" role="application" aria-label="Fahr-Joystick: hoch vorwärts, runter rückwärts, links oder rechts drehen" aria-disabled="true" tabindex="0"><div class="joystickAxis horizontal"></div><div class="joystickAxis vertical"></div><span class="stickUp">VOR</span><span class="stickDown">ZURÜCK</span><div id="joystickKnob"><span>⌖</span></div></div></div>
       <button class="strafeButton" id="strafeRight" disabled><span>⇥</span><strong>RECHTS</strong><small>versetzen</small></button></div>
-    <div class="driveControlFoot"><span id="driveInputLabel">Loslassen stoppt</span><label>Tempo <input id="driveSpeed" type="range" min="1" max="3" step="0.5" value="2"><output id="driveSpeedValue">2 cm/s</output></label><span id="driveFloorHint">Prüfmodus · kurze Impulse</span></div>
+    <div class="driveControlFoot"><span id="driveInputLabel">Loslassen stoppt</span><label>Tempo <input id="driveSpeed" type="range" min="2" max="12" step="1" value="6"><output id="driveSpeedValue">6 cm/s</output></label><span id="driveFloorHint">Prüfmodus · kurze Impulse</span></div>
   </section>
 </section>
 <aside>
@@ -31,7 +31,7 @@
       <button data-v="0,1,0" aria-label="Seitwärts links">←</button><span>halten</span><button data-v="0,-1,0" aria-label="Seitwärts rechts">→</button>
       <span></span><button data-v="-1,0,0" aria-label="Rückwärts">↓</button><span></span>
     </div>
-    <label class="speed">Tempo <output id="speedValue">2 cm/s</output><input id="speed" type="range" min="1" max="3" step="0.5" value="2"></label>
+    <label class="speed">Tempo <output id="speedValue">6 cm/s</output><input id="speed" type="range" min="2" max="12" step="1" value="6"></label>
     <div id="floorNote" class="note">Erste Bodenprüfung: kurze, begrenzte Impulse. Nach dem Anhalten loslassen und erneut drücken.</div>
   </section>
   <button id="release" hidden class="primary">Steuerung freigeben <span>→</span></button>

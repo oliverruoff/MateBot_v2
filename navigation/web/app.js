@@ -6,23 +6,38 @@ let selected=null,drag=null,token=null,armedAt=0,lastOK=0,manualTimer=null,seque
 const keys=new Set();
 const manualInputs=new Map();
 const mapHome=canvas.parentElement;
-let controlRequest=null,controlEpoch=0,manualFlight=null;
+let controlRequest=null,controlEpoch=0,manualFlight=null,controlAckAt=0,mapRequest=null;
 
 function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,5500)}
 async function api(action,body={}){
   const headers={'Content-Type':'application/json','X-Matebot-Control':'1'};
   if(token)headers['X-Matebot-Lease']=token;
-  const response=await fetch('/api/'+action,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(['manual','heartbeat','take-control','stop'].includes(action)?1200:35000)});
+  const response=await fetch('/api/'+action,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(['manual','heartbeat','take-control','stop'].includes(action)?2200:35000)});
   let value;try{value=await response.json()}catch{throw Error('Keine gültige Antwort vom Roboter')}
-  if(!response.ok)throw Error(value.error||'Aktion fehlgeschlagen');
+  if(!response.ok){const error=Error(value.error||'Aktion fehlgeschlagen');error.status=response.status;throw error}
+  if(['manual','heartbeat','take-control'].includes(action))controlAckAt=Date.now();
   return value;
 }
 const run=f=>async()=>{try{await f()}catch(e){toast(e.message)}};
-function screen(x,y){return [canvas.clientWidth/2+(x-center[0])*scale,canvas.clientHeight/2-(y-center[1])*scale]}
-function world(x,y){return [center[0]+(x-canvas.clientWidth/2)/scale,center[1]-(y-canvas.clientHeight/2)/scale]}
+function viewRotation(){return window.MatebotCockpit?.visible()?Math.PI/2-((state.localized?state.pose?.yaw:state.last_pose?.yaw)||0):0}
+function viewCenter(){return window.MatebotCockpit?.followMap()&&state.localized&&state.pose?[state.pose.x,state.pose.y]:center}
+function screen(x,y){const c=viewCenter(),p=MatebotDrive.rotatePoint(x-c[0],y-c[1],viewRotation());return [canvas.clientWidth/2+p[0]*scale,canvas.clientHeight/2-p[1]*scale]}
+function world(x,y){const c=viewCenter(),p=MatebotDrive.rotatePoint((x-canvas.clientWidth/2)/scale,-(y-canvas.clientHeight/2)/scale,-viewRotation());return [c[0]+p[0],c[1]+p[1]]}
 function pixel(e){const r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
-function canDrive(){return !state.manual_blocked&&state.manual_ready&&state.localized&&tool==='mapping'&&!positioning&&Date.now()-lastOK<1200&&(!window.MatebotCockpit?.visible()||window.MatebotCockpit.frameFresh())}
-function fit(){if(canvas.clientWidth<1||canvas.clientHeight<1){fitNeeded=true;return}if(!map){center=[0,0];scale=65}else{const a=map.origin[2],mx=map.width*map.resolution/2,my=map.height*map.resolution/2;center=[map.origin[0]+mx*Math.cos(a)-my*Math.sin(a),map.origin[1]+mx*Math.sin(a)+my*Math.cos(a)];scale=Math.min(canvas.clientWidth/(map.width*map.resolution+1),canvas.clientHeight/(map.height*map.resolution+1))}fitNeeded=false;draw()}
+function canDrive(){return !state.manual_blocked&&state.manual_ready&&tool==='mapping'&&!positioning&&Date.now()-lastOK<2200&&(!window.MatebotCockpit?.visible()||window.MatebotCockpit.frameFresh())}
+function fit(){
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  if(w<1||h<1){fitNeeded=true;return}
+  if(!map){center=[0,0];scale=65}
+  else{
+    const a=map.origin[2],mx=map.width*map.resolution/2,my=map.height*map.resolution/2;
+    center=[map.origin[0]+mx*Math.cos(a)-my*Math.sin(a),map.origin[1]+mx*Math.sin(a)+my*Math.cos(a)];
+    const c=viewCenter(),r=viewRotation();
+    const corners=[[0,0],[2*mx,0],[2*mx,2*my],[0,2*my]].map(p=>{const q=MatebotDrive.rotatePoint(...p,a);return MatebotDrive.rotatePoint(q[0]+map.origin[0]-c[0],q[1]+map.origin[1]-c[1],r)});
+    scale=Math.min(w/(2*Math.max(...corners.map(p=>Math.abs(p[0])))+.7),h/(2*Math.max(...corners.map(p=>Math.abs(p[1])))+.7));
+  }
+  fitNeeded=false;draw();
+}
 function size(){if(canvas.clientWidth<1||canvas.clientHeight<1)return;const d=devicePixelRatio||1;canvas.width=canvas.clientWidth*d;canvas.height=canvas.clientHeight*d;ctx.setTransform(d,0,0,d,0,0);if(fitNeeded&&map)fit();draw()}
 new ResizeObserver(size).observe(canvas);
 function setMap(value){
@@ -47,17 +62,18 @@ function rasterCells(start,end){
 }
 function cellsDraw(cells,color){
   const g=state.annotations?.grid_size||.25;ctx.fillStyle=color;
-  for(const [x,y] of cells){const p=screen(x*g,(y+1)*g),s=g*scale;if(p[0]+s<0||p[0]>canvas.clientWidth||p[1]+s<0||p[1]>canvas.clientHeight)continue;ctx.fillRect(p[0],p[1],s,s)}
+  for(const [x,y] of cells){const corners=[[x,y],[x+1,y],[x+1,y+1],[x,y+1]].map(p=>screen(p[0]*g,p[1]*g));ctx.beginPath();corners.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fill()}
+
 }
 function draw(){
   const w=canvas.clientWidth,h=canvas.clientHeight;if(w<1||h<1||!Number.isFinite(scale)||scale<=0)return;ctx.clearRect(0,0,w,h);
-  if(mapLayer&&map){const p=screen(...map.origin);ctx.save();ctx.translate(...p);ctx.rotate(-map.origin[2]);ctx.imageSmoothingEnabled=false;ctx.drawImage(mapLayer,0,-map.height*map.resolution*scale,map.width*map.resolution*scale,map.height*map.resolution*scale);ctx.restore()}
+  if(mapLayer&&map){const p=screen(...map.origin);ctx.save();ctx.translate(...p);ctx.rotate(-map.origin[2]-viewRotation());ctx.imageSmoothingEnabled=false;ctx.drawImage(mapLayer,0,-map.height*map.resolution*scale,map.width*map.resolution*scale,map.height*map.resolution*scale);ctx.restore()}
   const g=state.annotations?.grid_size||.25;
   if($('#showGrid').checked){
-    const step=g*Math.max(1,Math.ceil(8/(g*scale))),lo=world(0,h),hi=world(w,0);
+    const step=g*Math.max(1,Math.ceil(8/(g*scale))),corners=[[0,0],[w,0],[w,h],[0,h]].map(p=>world(...p)),lo=[Math.min(...corners.map(p=>p[0])),Math.min(...corners.map(p=>p[1]))],hi=[Math.max(...corners.map(p=>p[0])),Math.max(...corners.map(p=>p[1]))];
     ctx.lineWidth=.6;ctx.strokeStyle='#69815324';ctx.beginPath();
-    for(let x=Math.floor(lo[0]/step)*step;x<=hi[0];x+=step){const p=screen(x,0);ctx.moveTo(p[0],0);ctx.lineTo(p[0],h)}
-    for(let y=Math.floor(lo[1]/step)*step;y<=hi[1];y+=step){const p=screen(0,y);ctx.moveTo(0,p[1]);ctx.lineTo(w,p[1])}ctx.stroke();
+    for(let x=Math.floor(lo[0]/step)*step;x<=hi[0];x+=step){ctx.moveTo(...screen(x,lo[1]));ctx.lineTo(...screen(x,hi[1]))}
+    for(let y=Math.floor(lo[1]/step)*step;y<=hi[1];y+=step){ctx.moveTo(...screen(lo[0],y));ctx.lineTo(...screen(hi[0],y))}ctx.stroke();
   }
   cellsDraw(state.annotations?.zones||[],'#ba665c99');
   if(drag&&tool==='zones'&&!positioning){try{cellsDraw(rasterCells(drag.start,drag.current),brush==='paint'?'#b65049bb':'#d7eed1cc')}catch{}}
@@ -65,7 +81,7 @@ function draw(){
   const pose=state.localized?state.pose:state.last_pose;
   if(pose){
     if(state.localized){const [lx,ly,la]=state.lidar_transform||[0,0,0];ctx.fillStyle='#729548a0';for(const [px,py] of state.points||[]){const x=lx+px*Math.cos(la)-py*Math.sin(la),y=ly+px*Math.sin(la)+py*Math.cos(la),p=screen(pose.x+x*Math.cos(pose.yaw)-y*Math.sin(pose.yaw),pose.y+x*Math.sin(pose.yaw)+y*Math.cos(pose.yaw));ctx.fillRect(p[0]-1,p[1]-1,2,2)}}
-    const p=screen(pose.x,pose.y);ctx.save();ctx.translate(...p);ctx.rotate(-pose.yaw);ctx.globalAlpha=state.localized?1:.45;
+    const p=screen(pose.x,pose.y);ctx.save();ctx.translate(...p);ctx.rotate(-pose.yaw-viewRotation());ctx.globalAlpha=state.localized?1:.45;
     const dims=state.geometry||[.41,.3];ctx.strokeStyle='#bc965d';ctx.lineWidth=1;ctx.strokeRect(-dims[0]*scale/2,-dims[1]*scale/2,dims[0]*scale,dims[1]*scale);
     ctx.fillStyle='#d49e58';ctx.strokeStyle='white';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(0,0,8,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(17,0);ctx.lineTo(5,-5);ctx.lineTo(5,5);ctx.closePath();ctx.fill();ctx.restore();
   }
@@ -112,7 +128,7 @@ async function poll(){
     if(state.estop&&Date.now()-armedAt>1500&&token){token=null;endManual()}
     renderAnnotations();renderState();
     const v=String(state.map_version)+'/'+state.localized+'/'+state.annotations?.map_id;
-    if(v!==mapVersion){const value=await(await fetch('/api/map',{signal:AbortSignal.timeout(4000)})).json();mapVersion=v;setMap(value)}
+    if(v!==mapVersion&&!mapRequest){mapRequest=fetch('/api/map',{signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)throw Error();return r.json()}).then(value=>{mapVersion=v;setMap(value)}).catch(()=>{}).finally(()=>mapRequest=null)}
     draw();
   }catch{
     $('#banner').textContent='Verbindung unterbrochen. Steuerung gesperrt; der Roboter stoppt bei ausbleibenden Befehlen.';
@@ -134,7 +150,7 @@ async function ensureControl(mode='mapping'){
   })().finally(()=>controlRequest=null);
   return controlRequest;
 }
-function inputVector(){return MatebotDrive.combine([...manualInputs.values()],Number($('#speed').value)/100,Math.min(.1,state.manual_limits?.[1]||.1))}
+function inputVector(){return MatebotDrive.combine([...manualInputs.values()],Number($('#speed').value)/100,Math.min(.4,state.manual_limits?.[1]||.4))}
 function sendManualInput(){
   const [vx,vy,wz]=inputVector(),moving=!!(vx||vy||wz);
   if(moving&&!canDrive()){endManual();return}
@@ -143,7 +159,7 @@ function sendManualInput(){
   const request=api('manual',{vx,vy,wz,sequence:++sequence});
   if(moving)manualFlight=request;
   request.catch(e=>{
-    if(moving&&token===owner&&controlEpoch===epoch){
+    if(moving&&token===owner&&controlEpoch===epoch&&(e.status===409||Date.now()-controlAckAt>2500)){
       token=null;endManual();api('stop').catch(()=>{});toast('Fahrt angehalten: '+e.message);
     }
   }).finally(()=>{if(manualFlight===request)manualFlight=null});
@@ -195,7 +211,7 @@ $('#speed').oninput=()=>{$('#speedValue').textContent=$('#speed').value+' cm/s'}
 $('#showGrid').onchange=draw;$('#zoomIn').onclick=()=>{scale=Math.min(800,scale*1.25);draw()};$('#zoomOut').onclick=()=>{scale=Math.max(5,scale/1.25);draw()};$('#fit').onclick=fit;
 canvas.onwheel=e=>{e.preventDefault();const p=pixel(e),before=world(...p);scale=Math.max(5,Math.min(800,scale*(e.deltaY<0?1.12:1/1.12)));const after=world(...p);center=[center[0]+before[0]-after[0],center[1]+before[1]-after[1]];draw()};
 canvas.onpointerdown=e=>{const p=pixel(e);drag={pixel:p,start:world(...p),current:world(...p),center:[...center],revision:state.annotations?.revision};canvas.setPointerCapture(e.pointerId)};
-canvas.onpointermove=e=>{if(!drag)return;const p=pixel(e);if(positioning||tool==='zones')drag.current=world(...p);else center=[drag.center[0]-(p[0]-drag.pixel[0])/scale,drag.center[1]+(p[1]-drag.pixel[1])/scale];draw()};
+canvas.onpointermove=e=>{if(!drag)return;const p=pixel(e);if(positioning||tool==='zones')drag.current=world(...p);else{const delta=MatebotDrive.rotatePoint((p[0]-drag.pixel[0])/scale,-(p[1]-drag.pixel[1])/scale,-viewRotation());center=[drag.center[0]-delta[0],drag.center[1]-delta[1]]};draw()};
 canvas.onpointercancel=()=>{drag=null;draw()};
 canvas.onpointerup=async e=>{
   if(!drag)return;const d=drag,p=pixel(e);drag=null;
@@ -221,7 +237,7 @@ window.addEventListener('keydown',e=>{
 window.addEventListener('keyup',e=>{const key=e.key.toLowerCase();if(!keys.has(key))return;keys.delete(key);const v=keyboardVector();if(v.some(Boolean))startManual(v,'keyboard');else endManual('keyboard')});
 window.addEventListener('blur',()=>{endManual();if(token)stop().catch(()=>{})});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){endManual();if(token)stop().catch(()=>{})}});
-setInterval(()=>{if(token&&!document.hidden){const owner=token;api('heartbeat').catch(()=>{if(token===owner){token=null;endManual();toast('Verbindung unterbrochen – Joystick erneut betätigen')}})}},400);
+setInterval(()=>{if(token&&!document.hidden){const owner=token;api('heartbeat').catch(()=>{if(token===owner&&Date.now()-controlAckAt>2500){token=null;endManual();toast('Verbindung unterbrochen – Joystick erneut betätigen')}})}},400);
 window.MatebotApp={api,stop,startManual,endManual,canDrive,toast,state:()=>state,ownsControl:()=>!!token,
   setSpeed:value=>{const v=String(value);$('#speed').value=v;$('#speedValue').textContent=v+' cm/s'},
   ensureMapping:async()=>{if(state.annotations?.mode!=='mapping'){await stop();state.annotations=await api('settings',{mode:'mapping'});annotationRevision=-1;tool='mapping';renderAnnotations();renderState()}},
@@ -229,6 +245,7 @@ window.MatebotApp={api,stop,startManual,endManual,canDrive,toast,state:()=>state
   resume:async()=>{if(state.last_pose)await restore(state.last_pose)},
   selectPosition:()=>$('#position').click(),
   mountMap:container=>{(container||mapHome).prepend(canvas);fitNeeded=true;size()},
+  freezeMap:()=>{if(state.localized&&state.pose)center=[state.pose.x,state.pose.y]},
   fitMap:fit,zoomMap:factor=>{scale=Math.max(5,Math.min(800,scale*factor));draw()},
   redraw:()=>{size();renderState()}};
 poll();

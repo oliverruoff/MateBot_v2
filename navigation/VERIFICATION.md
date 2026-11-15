@@ -5,6 +5,31 @@ Original software, its modified files and logs remain intact. Pre-change archive
 are stored under `/home/matebot/backups/`. No credentials or floor-plan data are
 included in the source repository.
 
+## Smooth motion and heading-up map (latest)
+
+- Replaced 80-ms waves launched on a 50-ms ROS timer (inherently leaving gaps)
+  with synchronized one-shot DMA successors, maximum two finite waves outstanding.
+  A separate 20-ms motor thread keeps ROS callbacks out of the timing path.
+- Actual GPIO timing measured with robot service stopped and motor ENABLE forced
+  inactive by a wrapper: 1502 edges at 1000 Hz, minimum/maximum edge intervals
+  994/1005 microseconds, zero underruns, motor power stayed disabled. This is a
+  real DMA timing measurement, not a physical floor-drive validation.
+- Removed always-running Nav2 stack from mapping bringup. Before change load average
+  was about 9 on the four-core Pi, with many unnecessary Nav2 processes consuming
+  CPU. Nav2 now starts only in calibrated navigation mode and stops on manual mode.
+- Nominal manual default 6 cm/s, slider 2–12 cm/s; yaw limit 0.4 rad/s. Actual distance
+  per step remains subject to the existing hardware calibration.
+- Manual control without keepout cells no longer requires global SLAM localization;
+  sensor/obstacle checks remain. Keepouts and autonomous navigation still require pose.
+- Ownership lasts 2.5 s; movement watchdog remains separate at 500 ms. State polling
+  runs independently of map download; a failed heartbeat cannot invalidate recently
+  accepted drive packets. On the actual Pi with browser video running, 70 zero-speed
+  packets including a deliberate 1.4-s network gap retained one owner; median/max
+  HTTP latency 30/56 ms. No motion was commanded by this connection check.
+- Heading-up map rotates map tiles, grid, keepouts and pose consistently; inverse
+  coordinates preserve editing/panning. Four Node tests include forward-up and inverse
+  transforms for multiple headings. 27 Python tests and 11 ROS fake-GPIO checks pass.
+
 ## Manual control interruption fix
 
 - Live stationary sampling reproduced a sporadic self return at body (0.236,-0.012)
