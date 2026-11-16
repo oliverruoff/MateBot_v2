@@ -4,7 +4,7 @@ import struct
 import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from core import LD19,crc8,wheels,twist,finite_wave
+from core import LD19,crc8,wheels,twist,finite_wave,lidar_bin
 
 
 class CoreTests(unittest.TestCase):
@@ -32,6 +32,23 @@ class CoreTests(unittest.TestCase):
             recovered=twist(wheels(*cmd,.5,.6),.5,.6)
             for a,b in zip(cmd,recovered):
                 self.assertAlmostEqual(a,b)
+
+    def test_mounted_lidar_preserves_front_and_corrects_left_right(self):
+        def body(degrees,sign,yaw):
+            a=math.radians(lidar_bin(degrees,sign))+yaw
+            return math.cos(a),math.sin(a)
+        old=lambda a:body(a,-1,-math.pi/2)
+        corrected=lambda a:body(a,1,math.pi/2)
+        for a in (0,30,90,180,270,359):
+            self.assertAlmostEqual(old(a)[0],corrected(a)[0])
+            self.assertAlmostEqual(old(a)[1],-corrected(a)[1])
+        self.assertAlmostEqual(corrected(270)[0],1.)
+        self.assertGreater(corrected(0)[1],0.)
+        self.assertLess(corrected(180)[1],0.)
+        # A physical +10deg yaw makes the same landmark's bearing -10deg.
+        before=corrected(270);after=corrected(260)
+        delta=math.atan2(before[0]*after[1]-before[1]*after[0],sum(x*y for x,y in zip(before,after)))
+        self.assertAlmostEqual(delta,-math.radians(10))
 
     def test_wave_has_finite_duration_and_all_outputs_low(self):
         pins=[9,22,13,5]

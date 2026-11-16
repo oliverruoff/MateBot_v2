@@ -32,7 +32,7 @@ from tf2_ros import TransformBroadcaster, Buffer, TransformListener
 from waitress import serve
 from PIL import Image
 
-from core import LD19, wheels, finite_wave
+from core import LD19, wheels, finite_wave, lidar_bin
 from session import Session, ControlLease, atomic_json, LEASE_TIMEOUT
 from spatial import overlay_indices, zone_collision, laser_to_base, self_return, obstacle_risk, sweep_hits_zones
 from api import create_app
@@ -581,8 +581,9 @@ class Bridge(Node):
                                     start = self.get_clock().now()
                                 previous = angle
                                 if 0.12 <= distance <= 12.0 and confidence >= 15:
-                                    # LD19 clockwise -> REP-103 counter-clockwise.
-                                    index = int(round((-angle) % 360)) % 360
+                                    # Mount handedness was measured against gyro
+                                    # and camera; this robot needs native angles.
+                                    index = lidar_bin(angle,CFG.get('lidar_angle_sign',-1))
                                     ranges[index] = distance
             except Exception as exc:
                 self.error = 'LiDAR: ' + str(exc)

@@ -266,3 +266,9 @@ UI, data persistence and planner behavior are tested; real manual/automatic
 driving, dynamic obstacle avoidance, emergency stopping distance and localization
 under slip require commissioning on this chassis. Hard power loss can discard
 the last not-yet-completed snapshot and cannot guarantee filesystem/hardware health.
+
+### LiDAR handedness and physical drive follow-up (2026-11-16)
+
+Raw gyro and camera comparisons establish that this mounting needs native LiDAR angle sign +1 and yaw +pi/2. This preserves forward and corrects left/right. The angle convention is configurable and covered by a coordinate regression test. Existing maps were archived before starting a fresh corrected map; a warped SLAM map cannot be repaired by changing only the display.
+
+Physical driving remains unresolved. A bounded forward ramp from 10 to 2000 Hz with continuous PWM, raw gyro monitoring and scan registration produced approximately 3 cm forward displacement and 6 degrees unwanted yaw, rather than a verified 10 cm forward drive. Front-sector median ranges changed their visible surfaces during yaw and are not reliable displacement evidence; the full scan registration is used instead. No arrival or reliable manual-drive claim is made. 42 Python and 4 JavaScript checks pass.

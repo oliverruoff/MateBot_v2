@@ -45,6 +45,12 @@ class LD19:
         return packets
 
 
+def lidar_bin(angle,angle_sign=-1):
+    """Convert device angle into the mounted scanner's ROS angular ordering."""
+    if angle_sign not in (-1,1):raise ValueError('LiDAR angle sign must be -1 or 1')
+    return int(round(angle_sign*angle))%360
+
+
 def wheels(vx, vy, wz, wheelbase, track_width):
     k = (wheelbase + track_width) / 2
     return [vx - vy - k*wz, vx + vy + k*wz,

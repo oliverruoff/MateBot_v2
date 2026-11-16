@@ -28,8 +28,10 @@ lidar_port: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Control
 lidar_x: 0.0
 lidar_y: 0.0
 lidar_z: 0.14
-# Front-box comparison: body front appears at ROS scan +91 deg; cardinal mount +90 deg.
-lidar_yaw: -1.5707963267948966
+# Camera/gyro left-turn comparisons establish native angular ordering for this
+# mount. Together these values preserve front and correct the left/right mirror.
+lidar_angle_sign: 1
+lidar_yaw: 1.5707963267948966
 # Repeated self return at body (0.236,-0.012): include 4 cm near-range error.
 # Masked rays stay unknown; Nav2's collision circle includes this padded outline.
 self_filter_padding: 0.04
