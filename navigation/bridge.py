@@ -271,6 +271,8 @@ class Bridge(Node):
 
     def manual(self,token,vx,vy,wz,sequence=None):
         with self.lock:
+            if self.estop and getattr(self,'stop_reason','Gestoppt')!='Gestoppt':
+                raise ValueError('Fahrt gestoppt: '+self.stop_reason)
             self.lease.check(token,time.monotonic(),refresh=True)
             if type(sequence) is not int or sequence<0 or sequence>2**53:
                 raise ValueError('Ungültige Befehlsfolge')
@@ -367,7 +369,9 @@ class Bridge(Node):
         if mode=='navigation' and not self.navigation_ready():return 'Zielmodus: zuerst die vier Bodenprüfungen bestätigen'
         if include_stop and self.estop:return self.stop_reason
         if now-self.scan_at>.4 or self.valid_points<80:return 'LiDAR nicht bereit'
-        if now-self.imu_at>.4:return 'IMU nicht bereit'
+        # Body-relative manual driving without keepouts tolerates a brief IMU
+        # scheduling delay. Global navigation still requires the tighter limit.
+        if now-self.imu_at>(.8 if mode=='mapping' and not self.zones else .4):return 'IMU nicht bereit'
         if mode=='navigation' or self.zones:
             if not self.localized:return getattr(self,'localization_status','Position wird automatisch gesucht')
             if not self.pose or self.pose.get('age',99)>1.:return 'Roboterposition nicht aktuell'
@@ -453,7 +457,9 @@ class Bridge(Node):
                 cmd = [0., 0., 0.]
                 self.applied_cmd = [0., 0., 0.]
             elif any(abs(v)>0.001 for v in cmd):
-                limits=[0.3*dt,0.3*dt,0.8*dt]
+                # Loaded open-loop steppers cannot follow large frequency jumps
+                # between queued waves. Ramp gently rather than skipping steps.
+                limits=[CFG.get('linear_acceleration',.04)*dt]*2+[CFG.get('angular_acceleration',.15)*dt]
                 cmd=[old+max(-limit,min(limit,target-old))
                      for old,target,limit in zip(self.applied_cmd,cmd,limits)]
                 self.applied_cmd=list(cmd)

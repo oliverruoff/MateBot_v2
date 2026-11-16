@@ -71,6 +71,19 @@ class ROSMotorInterlockTests(unittest.TestCase):
         self.clock_patch.stop();self.robot.close();self.robot.destroy_node();self.temp.cleanup()
     def advance(self,seconds=.05):
         self.now[0]+=seconds;self.robot.scan_at=self.robot.imu_at=self.now[0]
+    def test_manual_imu_scheduling_delay_does_not_drop_held_command(self):
+        r=self.robot;token=r.take_control('mapping')['token']
+        r.imu_at=self.now[0]-.47
+        r.manual(token,.01,0.,0.,1);r.tick()
+        self.assertFalse(r.estop)
+        r.imu_at=self.now[0]-.81;r.tick()
+        self.assertTrue(r.estop)
+        with self.assertRaisesRegex(ValueError,'IMU nicht bereit'):
+            r.manual(token,.01,0.,0.,2)
+    def test_navigation_retains_tight_imu_timeout(self):
+        r=self.robot;r.annotations['calibration']={key:True for key in r.annotations['calibration']}
+        r.imu_at=self.now[0]-.47
+        self.assertEqual(r.readiness('navigation',include_stop=False),'IMU nicht bereit')
     def test_unverified_floor_command_has_hard_pulse_budget(self):
         self.addCleanup(patch.stopall)
         patch.dict(bridge.CFG,{'floor_test_enabled':True}).start()

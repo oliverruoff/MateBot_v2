@@ -24,7 +24,7 @@ function viewCenter(){return window.MatebotCockpit?.followMap()&&state.localized
 function screen(x,y){const c=viewCenter(),p=MatebotDrive.rotatePoint(x-c[0],y-c[1],viewRotation());return [canvas.clientWidth/2+p[0]*scale,canvas.clientHeight/2-p[1]*scale]}
 function world(x,y){const c=viewCenter(),p=MatebotDrive.rotatePoint((x-canvas.clientWidth/2)/scale,-(y-canvas.clientHeight/2)/scale,-viewRotation());return [c[0]+p[0],c[1]+p[1]]}
 function pixel(e){const r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
-function canDrive(){return !state.manual_blocked&&state.manual_ready&&tool==='mapping'&&!positioning&&Date.now()-lastOK<2200&&(!window.MatebotCockpit?.visible()||window.MatebotCockpit.frameFresh())}
+function canDrive(){return !state.manual_blocked&&state.manual_ready&&tool!=='zones'&&!positioning&&Date.now()-lastOK<2200&&(!window.MatebotCockpit?.visible()||window.MatebotCockpit.frameFresh())}
 function fit(){
   const w=canvas.clientWidth,h=canvas.clientHeight;
   if(w<1||h<1){fitNeeded=true;return}
@@ -142,10 +142,14 @@ async function poll(){
 }
 async function stop(){endManual();token=null;window.MatebotGoals?.onStop();await api('stop');if(!$('#goalDialog').open)selected=null;keys.clear();draw()}
 async function ensureControl(mode='mapping'){
-  if(token&&!state.estop)return true;
+  if(token&&!state.estop&&state.annotations?.mode===mode)return true;
   if(controlRequest)return controlRequest;
   const epoch=controlEpoch;
   controlRequest=(async()=>{
+    if(mode==='mapping'&&state.annotations?.mode!=='mapping'){
+      state.annotations=await api('settings',{mode:'mapping'});token=null;state.estop=true;
+      annotationRevision=-1;tool='mapping';renderAnnotations();renderState();
+    }
     const value=await api('take-control',{mode});
     if(epoch!==controlEpoch){await api('stop');return false}
     token=value.token;sequence=0;armedAt=Date.now();state.estop=false;state.blocked='';return true;
@@ -180,7 +184,7 @@ function endManual(source=null){
 function startManual(vector,source='pad'){
   if(!canDrive())return;
   manualInputs.set(source,vector);
-  if(token&&!state.estop){syncManual();return}
+  if(token&&!state.estop&&state.annotations?.mode==='mapping'){syncManual();return}
   ensureControl().then(acquired=>{if(acquired)syncManual()}).catch(e=>{endManual();toast(e.message)});
 }
 function openGoal(x,y,name='',heading){window.MatebotGoals.open(x,y,name,heading).catch(e=>toast(e.message))}
@@ -207,7 +211,7 @@ $('#speed').oninput=()=>{$('#speedValue').textContent=$('#speed').value+' cm/s'}
 $('#panMap').onclick=()=>{const active=$('#panMap').classList.toggle('active');$('#panMap').setAttribute('aria-pressed',String(active))};
 $('#showGrid').onchange=draw;$('#zoomIn').onclick=()=>{scale=Math.min(800,scale*1.25);draw()};$('#zoomOut').onclick=()=>{scale=Math.max(5,scale/1.25);draw()};$('#fit').onclick=fit;
 canvas.onwheel=e=>{e.preventDefault();const p=pixel(e),before=world(...p);scale=Math.max(5,Math.min(800,scale*(e.deltaY<0?1.12:1/1.12)));const after=world(...p);center=[center[0]+before[0]-after[0],center[1]+before[1]-after[1]];draw()};
-canvas.onpointerdown=e=>{const p=pixel(e);drag={pixel:p,start:world(...p),current:world(...p),center:[...center],revision:state.annotations?.revision,aim:tool==='navigation'&&!$('#panMap').classList.contains('active')&&!e.shiftKey};canvas.setPointerCapture(e.pointerId)};
+canvas.onpointerdown=e=>{const p=pixel(e);drag={pixel:p,start:world(...p),current:world(...p),center:[...center],revision:state.annotations?.revision,aim:tool!=='zones'&&!positioning&&!$('#panMap').classList.contains('active')&&!e.shiftKey};canvas.setPointerCapture(e.pointerId)};
 canvas.onpointermove=e=>{if(!drag)return;const p=pixel(e);if(positioning||tool==='zones'||drag.aim)drag.current=world(...p);else{const delta=MatebotDrive.rotatePoint((p[0]-drag.pixel[0])/scale,-(p[1]-drag.pixel[1])/scale,-viewRotation());center=[drag.center[0]-delta[0],drag.center[1]-delta[1]]};draw()};
 canvas.onpointercancel=()=>{drag=null;draw()};
 canvas.onpointerup=async e=>{
@@ -238,7 +242,7 @@ setInterval(()=>{if(token&&!document.hidden){const owner=token;api('heartbeat').
 window.MatebotApp={api,stop,ensureControl,startManual,endManual,canDrive,toast,state:()=>state,ownsControl:()=>!!token,
   setSpeed:value=>{const v=String(value);$('#speed').value=v;$('#speedValue').textContent=v+' cm/s'},
   selectGoal:(x,y)=>{selected=[x,y];draw()},mapData:()=>map,mapImage:()=>mapLayer,
-  ensureNavigation:async()=>{if(state.annotations?.mode!=='navigation'){await stop();state.annotations=await api('settings',{mode:'navigation'});annotationRevision=-1;tool='navigation';renderAnnotations();renderState()}},
+  ensureNavigation:async()=>{if(state.annotations?.mode!=='navigation'){endManual();token=null;state.annotations=await api('settings',{mode:'navigation'});annotationRevision=-1;tool='navigation';renderAnnotations();renderState()}},
   ensureMapping:async()=>{if(state.annotations?.mode!=='mapping'){await stop();state.annotations=await api('settings',{mode:'mapping'});annotationRevision=-1;tool='mapping';renderAnnotations();renderState()}},
   openArm:()=>{$('#onSite').checked=false;$('#armDialog').showModal()},
   resume:async()=>{if(state.last_pose)await restore(state.last_pose)},
@@ -247,4 +251,5 @@ window.MatebotApp={api,stop,ensureControl,startManual,endManual,canDrive,toast,s
   freezeMap:()=>{if(state.localized&&state.pose)center=[state.pose.x,state.pose.y]},
   fitMap:fit,zoomMap:factor=>{scale=Math.max(5,Math.min(800,scale*factor));draw()},
   redraw:()=>{size();renderState()}};
+window.MatebotApp.setMapTool=async next=>{await stop();positioning=false;tool=next==='zones'?'zones':state.annotations?.mode||'mapping';$('#panMap').classList.remove('active');$('#panMap').setAttribute('aria-pressed','false');renderMode()};
 poll();

@@ -38,7 +38,7 @@
     let detail='Pfeil ziehen oder Regler bewegen. Die Richtung gilt bei Ankunft.';
     if(!state.calibrated)detail='Für die Zielfahrt fehlen noch bestätigte Fahrprüfungen unter Einstellungen.';
     else if(!state.localized)detail=state.localization_status||'Position wird gesucht';
-    else if(!state.navigation_ready)detail=state.navigation_status||'Navigation startet …';
+    else if(!state.navigation_ready)detail=state.annotations?.mode==='mapping'?'Losfahren startet die Navigation.':state.navigation_status||'Navigation startet …';
     if(phase==='preparing'){title=state.navigation_ready?'Route wird geplant …':'Navigation wird gestartet …';detail='Die Fahrt beginnt, sobald Route und Steuerung bereit sind. STOPP bricht ab.'}
     if(phase==='running'){title='Matebot fährt zum Ziel'+(state.goal_distance!=null?' · '+state.goal_distance.toFixed(1)+' m verbleibend':'');detail='Ankunft mit der gewählten Blickrichtung. Schließen stoppt die Fahrt.'}
     if(phase==='running'&&state.manual_warning){title='Hindernis erkannt';detail='Matebot prüft eine freie Fahrtrichtung. STOPP bricht die Fahrt ab.'}
@@ -84,7 +84,7 @@
   $('#goalHeading').oninput=()=>{heading=Number($('#goalHeading').value)*Math.PI/180;phase='draft';validateSoon();render()};
   $('#goalFaceRobot').onclick=()=>{const p=app.state().pose;if(p&&target){heading=Math.atan2(p.y-target[1],p.x-target[0]);validateSoon();render()}};
   async function open(x,y,name='',angle){
-    await app.stop();await app.ensureNavigation();
+    await app.stop();
     epoch++;target=[x,y];error='';phase='draft';hasStarted=false;const pose=app.state().pose;
     heading=Number.isFinite(angle)?angle:pose?Math.atan2(y-pose.y,x-pose.x):0;
     app.selectGoal(x,y);$('#favoriteName').value=name;
@@ -95,6 +95,8 @@
     if(active()||validity())return;
     const current=++epoch,goal={x:target[0],y:target[1],yaw:heading};phase='preparing';error='';render();
     try{
+      await app.ensureNavigation();
+      if(current!==epoch||!dialog.open)return;
       const deadline=Date.now()+45000;
       while(!app.state().navigation_ready){
         if(current!==epoch||!dialog.open)return;

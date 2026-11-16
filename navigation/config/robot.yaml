@@ -3,6 +3,8 @@ motion_verified: false
 manual_ready: true
 manual_max_linear_speed: 0.12
 manual_max_angular_speed: 0.40
+linear_acceleration: 0.04
+angular_acceleration: 0.15
 # Before distance calibration: at most 160 pulses per wheel per held command.
 floor_test_pulse_limit: 160
 floor_test_enabled: false

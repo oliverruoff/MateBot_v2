@@ -5,6 +5,40 @@ Original software, its modified files and logs remain intact. Pre-change archive
 are stored under `/home/matebot/backups/`. No credentials or floor-plan data are
 included in the source repository.
 
+## Unified cockpit and real drive investigation (2026-11-16, follow-up)
+
+- One responsive cockpit now contains the house map, live camera, joystick and
+  strafe buttons. Root and `/drive` show the same UI. Map taps select goals by
+  default; panning is an explicit toggle. Raster keepouts are edited in the same
+  map, and saving, backups, favorites and settings live in the menu.
+- Navigation starts after pressing Losfahren, rather than when previewing a
+  target. Manual input automatically returns from navigation to mapping, without
+  requiring another view or mode selection.
+- A real browser-held joystick test reproduced a 470-ms IMU delay, followed by a
+  misleading expired-control error. Manual driving without keepouts now tolerates
+  up to 800 ms of IMU scheduling delay; navigation/keepouts retain 400 ms. LiDAR,
+  command and lease watchdogs remain unchanged. Errors preserve the sensor stop
+  reason. Motor acceleration is gentler (0.04 m/s², 0.15 rad/s²).
+- After correction, a real three-second held joystick produced 37 finite waves,
+  zero DMA underruns and no unexpected stop or expired-control message. Release
+  stopped output. This validates continuous command delivery, not wheel travel.
+- Physical travel remains UNVERIFIED / FAULTY: several bounded forward, rotation,
+  standalone finite-wave and standalone PWM tests produced little reliable motion.
+  A nominal 4-cm/s three-second forward command changed the matched scan by only
+  about 4 mm, despite all four STEP outputs receiving pulses. Supply, loaded motor
+  behavior and mechanical condition cannot be confirmed from GPIO telemetry.
+  Do not equate integrated commanded steps with real chassis travel.
+- A real map tap and 358° arrival heading started NavigateToPose from the mobile
+  popup, with live camera throughout. Reported distance decreased from 0.74 m to
+  approximately 0.57 m; the test was explicitly stopped. This is NOT a validated
+  physical arrival. Full physical navigation remains open pending the drive fault.
+- Validation: 35 Python unit tests, four Node math tests and 15 isolated ROS
+  safety checks pass. The new ROS cases cover tolerated manual IMU scheduling
+  delay, genuine IMU timeout reporting and unchanged navigation IMU limits.
+  Mobile layout, direct goal selection, heading, start, STOP, zones and menu were
+  checked against the actual robot. Private scans, camera frames and traces stay
+  outside the repository.
+
 ## Point-and-click arrival pose and live mission popup (2026-11-16)
 
 - Map tap selects a target; map drag also sets arrival yaw. The modal permits

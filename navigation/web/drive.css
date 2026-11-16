@@ -79,3 +79,14 @@ body.drive-view .dialogbuttons button{min-height:42px}
 @media(max-width:600px){.goalDialog{padding:16px;border-radius:18px;width:96vw}.goalHeading h2{font-size:20px}.goalLayout{grid-template-columns:1fr}.goalDirection{display:grid;grid-template-columns:1fr 110px}#goalPreview{height:165px}.headingControl{flex-direction:column;justify-content:center;align-items:stretch;padding:12px}.headingControl label{flex:0}.goalVideoStage{min-height:150px;height:155px;flex:none}.goalVideoStage img{max-height:155px}.goalActions{bottom:-16px}.goalSave{font-size:10px}.goalMission{padding:10px 0}}
 
 #goalPreview{position:relative;inset:auto} .goalDirection{position:relative}
+
+/* One cockpit for mapping, manual driving and destination selection. */
+#driveView{max-width:1100px;grid-template-rows:44px auto minmax(220px,1.5fr) minmax(140px,1fr) 196px}
+.radarCard{display:flex;flex-direction:column;min-height:0}.radarStage{flex:1;min-height:90px}
+.mapActions{display:flex;gap:6px;padding:0 10px 5px}.mapActions button{font-size:10px;padding:4px 10px;min-height:30px!important}.mapActions .active{background:#536a3d!important}.mapHint{font-size:10px;color:#c7dda6;padding:2px 12px 7px}
+#menuDialog{max-height:90dvh;overflow:auto;background:#f3f6ed;width:440px;padding:18px}.menuHeading{display:flex;align-items:center;justify-content:space-between}.menuHeading h2{font-size:21px}.menuHeading button{padding:10px}
+#menuDialog aside{display:flex!important;position:static;width:100%;height:auto;overflow:visible;padding:8px 0;border:0;background:transparent}
+#menuDialog .brand,#menuDialog .modes,#menuDialog #drivePanel,#menuDialog #stop,#menuDialog .footer{display:none!important}
+#driveMapStage .zoneTools{top:8px;left:8px;max-width:85%;z-index:2;padding:10px}#driveMapStage .zoneTools small{display:none}
+@media(min-width:850px) and (min-height:551px){#driveView{grid-template-columns:1.5fr 1fr;grid-template-rows:44px auto minmax(220px,1fr) 205px}.driveHeader,.driveNotice{grid-column:1/-1}.radarCard{grid-column:1;grid-row:3/5}.cameraCard{grid-column:2;grid-row:3}.touchControls{grid-column:2;grid-row:4}}
+@media(max-width:849px){#driveView{grid-template-rows:40px auto minmax(205px,1.4fr) minmax(120px,1fr) 180px;gap:6px;padding-top:6px}.joystickRow{height:132px}.joystickWrap,#joystick{width:130px;height:130px}}

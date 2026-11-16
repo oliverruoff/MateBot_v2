@@ -3,11 +3,11 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#12211d"><title>Matebot · Erdgeschoss</title><link rel="stylesheet" href="/assets/style.css"><link rel="stylesheet" href="/assets/drive.css"></head>
 <body>
 <section id="driveView" aria-label="Mobile Fahransicht">
-  <header class="driveHeader"><div class="driveBrand"><span>m</span><div>matebot<small>FAHRANSICHT</small></div></div><div class="driveHeaderActions"><button id="driveMap">▦ Karte</button><button id="driveStop">■ STOPP</button></div></header>
+  <header class="driveHeader"><div class="driveBrand"><span>m</span><div>matebot<small>KARTE & STEUERUNG</small></div></div><div class="driveHeaderActions"><button id="driveMap">☰ Menü</button><button id="driveStop">■ STOPP</button></div></header>
   <div class="driveNotice"><span id="driveStatusDot"></span><p id="driveNoticeText">Verbindung wird aufgebaut …</p><button id="driveResume" hidden>Stand unverändert</button><button id="drivePosition" hidden>Position</button><button id="driveArm" hidden>Freigeben</button></div>
   <section class="radarCard" aria-label="Live-Hauskarte">
     <div class="driveCardHead"><span>Hauskarte <b id="driveMapStatus">LIVE · SLAM</b></span><div class="rangeButtons" aria-label="Kartenansicht"><button id="driveZoomOut" aria-label="Karte verkleinern">−</button><button id="driveFit">Ganzes Haus</button><button id="driveZoomIn" aria-label="Karte vergrößern">+</button></div></div>
-    <div class="radarStage" id="driveMapStage"><canvas hidden id="frontLidar" aria-label="LiDAR: vorne oben, links links, rechts rechts"></canvas><span id="lidarStale" hidden>LiDAR nicht aktuell</span></div>
+    <div class="mapActions"><button id="mapPan">↔ Karte verschieben</button><button id="mapZones">Sperrzonen</button></div><div class="mapHint" id="mapHint">Freie Fläche antippen → Richtung wählen → Losfahren</div><div class="radarStage" id="driveMapStage"><canvas hidden id="frontLidar" aria-label="LiDAR: vorne oben, links links, rechts rechts"></canvas><span id="lidarStale" hidden>LiDAR nicht aktuell</span></div>
     <div class="rangeReadouts"><div><small>LINKS VORNE</small><strong id="distanceLeft">—</strong></div><div class="forwardDistance"><small>GERADEAUS</small><strong id="distanceFront">—</strong></div><div><small>RECHTS VORNE</small><strong id="distanceRight">—</strong></div></div>
   </section>
   <section class="cameraCard" aria-label="Kamera-Livebild nach vorne">
@@ -40,7 +40,7 @@
   <div class="mapbuttons"><button id="save">↓ Karte speichern</button><a id="backup" href="/api/backup" download>↗ Sicherung laden</a></div>
   <small id="saved">Automatische Sicherung alle 30 Sekunden</small>
   <button id="newMap" class="quiet">Neue Karte beginnen …</button>
-  <details id="favoriteSection"><summary>Gespeicherte Ziele <span id="favoriteCount">0</span></summary><div id="favorites"><p class="hint">Im Zielmodus einen Punkt wählen und benennen.</p></div></details>
+  <details id="favoriteSection"><summary>Gespeicherte Ziele <span id="favoriteCount">0</span></summary><div id="favorites"><p class="hint">Auf der Karte ein Ziel wählen und im Ziel-Fenster speichern.</p></div></details>
   <details id="setup"><summary>Fahrprüfung & Einstellungen</summary><button id="position">⌖ Position bei Bedarf korrigieren</button><p class="hint">Die Rad-Richtungen sind geprüft. Die folgenden Tests auf ebenem Boden persönlich durchführen und erst danach bestätigen.</p>
     <label class="check"><input type="checkbox" data-check="translation"> Vorwärts/Rückwärts und Wegstrecke stimmen</label><label class="check"><input type="checkbox" data-check="lateral"> Links/Rechts-Seitwärtsfahrt stimmt</label><label class="check"><input type="checkbox" data-check="rotation"> Drehung und Kartenrichtung stimmen</label><label class="check"><input type="checkbox" data-check="stopping"> Loslassen, Stopp und Hindernis-Stopp geprüft</label><button id="saveChecks">Prüfergebnisse speichern</button>
     <label class="field">Kartenname<input id="mapName" maxlength="60" value="Erdgeschoss"></label><button id="saveName">Namen speichern</button><p class="hint">41 × 30 cm · LiDAR mittig, 14 cm hoch.<br>Keine bestätigten Absturzsensoren: Treppen physisch absichern.</p>
@@ -60,6 +60,7 @@
   </div>
   <footer><span id="task">Gestoppt</span><span id="mapStats">–</span></footer>
 </main>
+<dialog id="menuDialog"><div class="menuHeading"><h2>Karte & Einstellungen</h2><button id="menuClose" aria-label="Menü schließen">✕</button></div></dialog>
 <div id="toast" role="alert" hidden></div>
 <dialog id="armDialog"><h2>Steuerung freigeben</h2><p id="armText">Der Roboter fährt nur bei aktiver Verbindung. Manuell: Tasten gedrückt halten.</p><label class="check"><input id="onSite" type="checkbox"> Ich bin vor Ort; der Fahrbereich und Treppen sind abgesichert.</label><div class="dialogbuttons"><button data-close="armDialog">Abbrechen</button><button id="armNow" class="primary">Freigeben</button></div></dialog>
 <dialog id="goalDialog" class="goalDialog">

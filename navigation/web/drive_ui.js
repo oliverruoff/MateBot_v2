@@ -42,7 +42,8 @@
     let message=s.manual_blocked||s.manual_warning||'Bereit · Joystick halten, Loslassen stoppt';
     if(!s.localized&&s.saved_map)message=s.manual_blocked||'Ortung im Hintergrund · manuelles Fahren bereit';
     else if(!fresh)message=cameraEnabled?'Kamera wird verbunden':'Kamera pausiert – Fahren gesperrt';
-    else if(s.annotations?.mode==='navigation')message='Fahransicht öffnen: Einlernen wählen';
+    else if(s.annotations?.mode==='navigation')message='Karte antippen: Ziel wählen · Joystick: selbst fahren';
+    if(!$('#zoneTools').hidden)message='Sperrzonen bearbeiten · zum Fahren „Zonen fertig“ wählen';
     $('#driveNoticeText').textContent=message;
     $('#driveResume').hidden=$('#drivePosition').hidden=$('#driveArm').hidden=true;
     stick.setAttribute('aria-disabled',String(!ready));
@@ -122,7 +123,13 @@
   }
   $('#driveSpeed').oninput=()=>{app.setSpeed($('#driveSpeed').value);$('#driveSpeedValue').textContent=$('#driveSpeed').value+' cm/s'};
   $('#driveStop').onclick=guarded(app.stop);
-  $('#driveMap').onclick=()=>setView('map');
+  const menu=$('#menuDialog');menu.append(document.querySelector('aside'));
+  $('#menuClose').onclick=()=>menu.close();
+  $('#driveMap').onclick=()=>menu.showModal();
+  $('#mapPan').onclick=()=>{$('#panMap').click();$('#mapPan').classList.toggle('active',$('#panMap').classList.contains('active'));$('#mapPan').textContent=$('#panMap').classList.contains('active')?'⌖ Ziel wählen':'↔ Karte verschieben';$('#mapHint').textContent=$('#panMap').classList.contains('active')?'Ziehen verschiebt die Karte · Zielwahl zum Fahren wählen':'Freie Fläche antippen → Richtung wählen → Losfahren'};
+  $('#mapZones').onclick=guarded(async()=>{const zones=$('#zoneTools').hidden;await app.setMapTool(zones?'zones':'goals');$('#mapPan').disabled=zones;$('#mapZones').textContent=zones?'✓ Zonen fertig':'Sperrzonen';$('#mapHint').textContent=zones?'Rasterzellen antippen oder Rechteck ziehen · automatisch gespeichert':'Freie Fläche antippen → Richtung wählen → Losfahren'});
+  $('#driveMapStage').append($('#zoneTools'),$('#positionHelp'));
+  for(const id of ['position','newMap'])$('#'+id).addEventListener('click',()=>menu.close());
   for(const id of ['openDrive','openDriveNav'])$('#'+id).onclick=guarded(async()=>{setView('drive');await app.ensureMapping()});
   $('#driveArm').onclick=guarded(async()=>{await app.ensureMapping();app.openArm()});
   $('#driveResume').onclick=guarded(app.resume);
@@ -139,6 +146,5 @@
     onState:s=>{latest=s;renderStatus();drawRadar();if(!app.canDrive()&&(stickPointer!==null||sidePointers.size))app.endManual()},
     onDisconnect:()=>{latest={...latest,blocked:'Verbindung unterbrochen',estop:true};renderStatus()}};
   setInterval(()=>{if(cameraWanted()){renderStatus();stopForStaleVideo()}},150);
-  let preference=null;try{preference=localStorage.getItem('matebot.view')}catch{}
-  setView(location.pathname==='/drive'?'drive':preference|| (matchMedia('(max-width:800px)').matches?'drive':'map'),false);
+  setView('drive',false);
 })();
