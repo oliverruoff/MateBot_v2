@@ -70,6 +70,8 @@ def validate(doc):
         if any(type(favorite.get(k)) not in (float,int) or not math.isfinite(favorite[k])
                or abs(favorite[k])>500 for k in ('x','y')):
             raise ValueError('Ungültige Zielkoordinaten')
+        if 'yaw' in favorite and (type(favorite['yaw']) not in (int,float) or not math.isfinite(favorite['yaw'])):
+            raise ValueError('Ungültige Ziel-Blickrichtung')
     return doc
 
 
@@ -140,11 +142,16 @@ class Session:
                 doc['calibration']=calibration
             return self.commit(doc)
 
-    def favorite(self,name,x,y,delete=False):
+    def favorite(self,name,x,y,delete=False,heading=None):
         with self.lock:
             doc=self.get()
             doc['favorites']=[f for f in doc['favorites'] if f['name']!=name]
-            if not delete:doc['favorites'].append(dict(name=name,x=x,y=y))
+            if not delete:
+                favorite=dict(name=name,x=x,y=y)
+                if heading is not None:
+                    if not math.isfinite(heading):raise ValueError('Ungültige Blickrichtung')
+                    favorite['yaw']=heading
+                doc['favorites'].append(favorite)
             return self.commit(doc)
 
     def new_map(self):

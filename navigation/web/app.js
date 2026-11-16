@@ -85,6 +85,7 @@ function draw(){
     const dims=state.geometry||[.41,.3];ctx.strokeStyle='#bc965d';ctx.lineWidth=1;ctx.strokeRect(-dims[0]*scale/2,-dims[1]*scale/2,dims[0]*scale,dims[1]*scale);
     ctx.fillStyle='#d49e58';ctx.strokeStyle='white';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(0,0,8,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(17,0);ctx.lineTo(5,-5);ctx.lineTo(5,5);ctx.closePath();ctx.fill();ctx.restore();
   }
+  if(drag?.aim){const a=screen(...drag.start),b=screen(...drag.current);ctx.strokeStyle='#a57636';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke()}
   if(selected){const p=screen(...selected);ctx.strokeStyle='#b17d3b';ctx.lineWidth=2;ctx.beginPath();ctx.arc(...p,11,0,Math.PI*2);ctx.stroke()}
   if(positioning&&drag){const a=screen(...drag.start),b=screen(...drag.current);ctx.strokeStyle='#ba8b4b';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke()}
   const ruler=scale>150?.5:scale<30?2:1;$('#scale').textContent=ruler+' m';$('#scale').style.width=Math.max(15,ruler*scale)+'px';
@@ -97,7 +98,7 @@ function renderAnnotations(){
   const list=$('#favorites');list.replaceChildren();
   for(const f of a.favorites){
     const row=document.createElement('div');row.className='favoriteRow';
-    const button=document.createElement('button');button.textContent='⌖ '+f.name;button.onclick=()=>openGoal(f.x,f.y,f.name);
+    const button=document.createElement('button');button.textContent='⌖ '+f.name;button.onclick=()=>openGoal(f.x,f.y,f.name,f.yaw);
     const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label',f.name+' entfernen');remove.onclick=run(async()=>{await api('favorite',{...f,delete:true});toast('Gespeichertes Ziel entfernt')});
     row.append(button,remove);list.append(row);
   }
@@ -117,9 +118,10 @@ function renderState(){
   $('#release').disabled=!state.estop||!state.manual_ready||positioning||!state.localized||!state.pose||state.pose.age>.5||(state.annotations?.mode==='navigation'&&!state.calibrated);
   $('#release').title=state.blocked||'Steuerung vor Ort freigeben';
   document.querySelectorAll('[data-v]').forEach(b=>b.disabled=!canDrive());
-  $('#confirmGoal').disabled=!state.localized||!state.calibrated||state.annotations?.mode!=='navigation';
+
   $('#lastPosition').disabled=!state.last_pose;
   window.MatebotCockpit?.onState(state);
+  window.MatebotGoals?.onState(state);
 }
 async function poll(){
   try{
@@ -138,7 +140,7 @@ async function poll(){
   }
   setTimeout(poll,400);
 }
-async function stop(){endManual();token=null;await api('stop');selected=null;keys.clear();draw()}
+async function stop(){endManual();token=null;window.MatebotGoals?.onStop();await api('stop');if(!$('#goalDialog').open)selected=null;keys.clear();draw()}
 async function ensureControl(mode='mapping'){
   if(token&&!state.estop)return true;
   if(controlRequest)return controlRequest;
@@ -181,11 +183,7 @@ function startManual(vector,source='pad'){
   if(token&&!state.estop){syncManual();return}
   ensureControl().then(acquired=>{if(acquired)syncManual()}).catch(e=>{endManual();toast(e.message)});
 }
-function openGoal(x,y,name=''){
-  if(state.goal_status==='Unterwegs'){stop().catch(()=>{});toast('Laufende Fahrt gestoppt. Neues Ziel wählen.')}
-  selected=[x,y];$('#favoriteName').value=name;$('#goalText').textContent=state.calibrated?'Matebot plant einen Weg über bekannte freie Flächen. Mit Hierhin fahren starten.':'Als Ziel speichern ist bereits möglich. Zum Anfahren zuerst die vier Bodenprüfungen unter Einstellungen abschließen.';
-  $('#confirmGoal').disabled=!state.localized||!state.calibrated||state.annotations?.mode!=='navigation';$('#goalDialog').showModal();draw();
-}
+function openGoal(x,y,name='',heading){window.MatebotGoals.open(x,y,name,heading).catch(e=>toast(e.message))}
 async function restore(pose){await api('restore',{x:pose.x,y:pose.y,yaw:pose.yaw});positioning=false;mapVersion=null;renderMode();toast('Karte an korrigierter Position fortgesetzt.')}
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).close());
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=run(async()=>{await stop();positioning=false;tool=b.dataset.mode;if(tool!=='zones')await api('settings',{mode:tool});renderMode()}));
@@ -202,16 +200,15 @@ $('#newNow').onclick=run(async()=>{await stop();await api('new-map',{confirm:tru
 $('#saveName').onclick=run(async()=>{await api('settings',{title:$('#mapName').value});toast('Kartenname gespeichert')});
 $('#saveChecks').onclick=run(async()=>{await stop();$('#checksOnSite').checked=false;$('#checksDialog').showModal()});
 $('#checksNow').onclick=run(async()=>{const checks={};document.querySelectorAll('[data-check]').forEach(c=>checks[c.dataset.check]=c.checked);await api('calibration',{checks,on_site:$('#checksOnSite').checked});$('#checksDialog').close();toast('Prüfstand gespeichert. Steuerung bleibt gestoppt.')});
-$('#saveFavorite').onclick=run(async()=>{if(!selected)return;await api('favorite',{name:$('#favoriteName').value,x:selected[0],y:selected[1]});toast('Ziel gespeichert')});
-$('#confirmGoal').onclick=run(async()=>{if(!selected)return;if(!await ensureControl('navigation'))return;await api('goal',{x:selected[0],y:selected[1]});$('#goalDialog').close();toast('Ziel übernommen. Route wird geplant.')});
 $('#paint').onclick=()=>{brush='paint';$('#paint').classList.add('active');$('#erase').classList.remove('active')};
 $('#erase').onclick=()=>{brush='erase';$('#erase').classList.add('active');$('#paint').classList.remove('active')};
 $('#gridSize').onchange=run(async()=>{await api('zones',{paint:[],erase:[],grid_size:Number($('#gridSize').value),revision:state.annotations.revision});toast('Rastergröße gespeichert. Bestehende Sperrflächen bleiben gesperrt.')});
 $('#speed').oninput=()=>{$('#speedValue').textContent=$('#speed').value+' cm/s'};
+$('#panMap').onclick=()=>{const active=$('#panMap').classList.toggle('active');$('#panMap').setAttribute('aria-pressed',String(active))};
 $('#showGrid').onchange=draw;$('#zoomIn').onclick=()=>{scale=Math.min(800,scale*1.25);draw()};$('#zoomOut').onclick=()=>{scale=Math.max(5,scale/1.25);draw()};$('#fit').onclick=fit;
 canvas.onwheel=e=>{e.preventDefault();const p=pixel(e),before=world(...p);scale=Math.max(5,Math.min(800,scale*(e.deltaY<0?1.12:1/1.12)));const after=world(...p);center=[center[0]+before[0]-after[0],center[1]+before[1]-after[1]];draw()};
-canvas.onpointerdown=e=>{const p=pixel(e);drag={pixel:p,start:world(...p),current:world(...p),center:[...center],revision:state.annotations?.revision};canvas.setPointerCapture(e.pointerId)};
-canvas.onpointermove=e=>{if(!drag)return;const p=pixel(e);if(positioning||tool==='zones')drag.current=world(...p);else{const delta=MatebotDrive.rotatePoint((p[0]-drag.pixel[0])/scale,-(p[1]-drag.pixel[1])/scale,-viewRotation());center=[drag.center[0]-delta[0],drag.center[1]-delta[1]]};draw()};
+canvas.onpointerdown=e=>{const p=pixel(e);drag={pixel:p,start:world(...p),current:world(...p),center:[...center],revision:state.annotations?.revision,aim:tool==='navigation'&&!$('#panMap').classList.contains('active')&&!e.shiftKey};canvas.setPointerCapture(e.pointerId)};
+canvas.onpointermove=e=>{if(!drag)return;const p=pixel(e);if(positioning||tool==='zones'||drag.aim)drag.current=world(...p);else{const delta=MatebotDrive.rotatePoint((p[0]-drag.pixel[0])/scale,-(p[1]-drag.pixel[1])/scale,-viewRotation());center=[drag.center[0]-delta[0],drag.center[1]-delta[1]]};draw()};
 canvas.onpointercancel=()=>{drag=null;draw()};
 canvas.onpointerup=async e=>{
   if(!drag)return;const d=drag,p=pixel(e);drag=null;
@@ -219,7 +216,7 @@ canvas.onpointerup=async e=>{
     if(positioning){const end=world(...p);if(Math.hypot(end[0]-d.start[0],end[1]-d.start[1])<.15)throw Error('Von der Position mindestens ein Stück in Blickrichtung ziehen.');await restore({x:d.start[0],y:d.start[1],yaw:Math.atan2(end[1]-d.start[1],end[0]-d.start[0])})}
     else if(tool==='zones'){
       const cells=rasterCells(d.start,world(...p));const body={paint:[],erase:[],grid_size:state.annotations.grid_size,revision:d.revision};body[brush]=cells;await api('zones',body);toast(cells.length+' Zellen '+(brush==='paint'?'gesperrt':'freigegeben')+' und gespeichert');
-    }else if(tool==='navigation'&&Math.hypot(p[0]-d.pixel[0],p[1]-d.pixel[1])<5){const point=world(...p);openGoal(...point)}
+    }else if(d.aim){const end=world(...p),angle=Math.hypot(p[0]-d.pixel[0],p[1]-d.pixel[1])>8?Math.atan2(end[1]-d.start[1],end[0]-d.start[0]):undefined;openGoal(...d.start,'',angle)}
   }catch(error){toast(error.message)}draw();
 };
 document.querySelectorAll('[data-v]').forEach(b=>{
@@ -238,8 +235,10 @@ window.addEventListener('keyup',e=>{const key=e.key.toLowerCase();if(!keys.has(k
 window.addEventListener('blur',()=>{endManual();if(token)stop().catch(()=>{})});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){endManual();if(token)stop().catch(()=>{})}});
 setInterval(()=>{if(token&&!document.hidden){const owner=token;api('heartbeat').catch(()=>{if(token===owner&&Date.now()-controlAckAt>2500){token=null;endManual();toast('Verbindung unterbrochen – Joystick erneut betätigen')}})}},400);
-window.MatebotApp={api,stop,startManual,endManual,canDrive,toast,state:()=>state,ownsControl:()=>!!token,
+window.MatebotApp={api,stop,ensureControl,startManual,endManual,canDrive,toast,state:()=>state,ownsControl:()=>!!token,
   setSpeed:value=>{const v=String(value);$('#speed').value=v;$('#speedValue').textContent=v+' cm/s'},
+  selectGoal:(x,y)=>{selected=[x,y];draw()},mapData:()=>map,mapImage:()=>mapLayer,
+  ensureNavigation:async()=>{if(state.annotations?.mode!=='navigation'){await stop();state.annotations=await api('settings',{mode:'navigation'});annotationRevision=-1;tool='navigation';renderAnnotations();renderState()}},
   ensureMapping:async()=>{if(state.annotations?.mode!=='mapping'){await stop();state.annotations=await api('settings',{mode:'mapping'});annotationRevision=-1;tool='mapping';renderAnnotations();renderState()}},
   openArm:()=>{$('#onSite').checked=false;$('#armDialog').showModal()},
   resume:async()=>{if(state.last_pose)await restore(state.last_pose)},

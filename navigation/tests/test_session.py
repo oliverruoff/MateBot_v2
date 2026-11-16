@@ -82,6 +82,16 @@ class DurableRasterTests(unittest.TestCase):
         self.assertAlmostEqual(y,0.)
 
 
+class GoalHeadingPersistenceTests(unittest.TestCase):
+    def test_favorite_heading_survives_restart_and_old_favorites_stay_valid(self):
+        with tempfile.TemporaryDirectory() as folder:
+            session=Session(folder);session.favorite('Fenster',1.,2.,heading=1.23)
+            session.favorite('Alt',0.,0.)
+            favorites=Session(folder).get()['favorites']
+            self.assertAlmostEqual(favorites[0]['yaw'],1.23)
+            self.assertNotIn('yaw',favorites[1])
+
+
 class LeaseTests(unittest.TestCase):
     def test_reader_and_other_browser_cannot_keep_motion_alive(self):
         lease=ControlLease()

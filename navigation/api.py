@@ -97,7 +97,8 @@ def create_app(robot,web_root=None,camera=None):
             if action=='manual':
                 result=robot.manual(token,*numbers(data,['vx','vy','wz']),sequence=data.get('sequence'))
                 return jsonify(result or dict(ok=True))
-            if action=='goal':return jsonify(robot.goal(*numbers(data,['x','y']),token=token))
+            if action=='goal-preview':return jsonify(robot.goal_preview(*numbers(data,['x','y','yaw'])))
+            if action=='goal':return jsonify(robot.goal(*numbers(data,['x','y']),token=token,heading=numbers({'yaw':data.get('yaw',0.)},['yaw'])[0]))
             if action=='restore':return jsonify(robot.restore(*numbers(data,['x','y','yaw'])))
             if action=='save':return jsonify(robot.save_map())
             if action=='zones':return jsonify(robot.edit_zones(data.get('paint',[]),data.get('erase',[]),
@@ -110,7 +111,7 @@ def create_app(robot,web_root=None,camera=None):
                 name=data.get('name')
                 if not isinstance(name,str) or not name.strip():raise ValueError('Bitte einen Zielnamen eingeben')
                 x,y=numbers(data,['x','y'])
-                return jsonify(robot.favorite(name.strip(),x,y,delete=data.get('delete') is True))
+                return jsonify(robot.favorite(name.strip(),x,y,delete=data.get('delete') is True,heading=numbers({'yaw':data.get('yaw',0.)},['yaw'])[0] if 'yaw' in data else None))
             if action=='new-map':
                 if data.get('confirm') is not True:raise ValueError('Neue Karte muss ausdrücklich gewählt werden')
                 robot.new_map()

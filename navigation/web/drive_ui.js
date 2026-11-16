@@ -6,6 +6,7 @@
   let frameAt=0,lastSequence=-1,frameURL=null,framesShown=0,rateAt=performance.now(),displayFPS=0,stoppingForVideo=false;
   let followMap=true;
   let stickPointer=null,stickVector=[0,0,0];const sidePointers=new Map();
+  const cameraWanted=()=>visible()||$('#goalDialog').open;
   const visible=()=>view==='drive',frameFresh=()=>cameraEnabled&&performance.now()-frameAt<1200&&frameAt>0;
   const guarded=f=>async()=>{try{await f()}catch(e){app.toast(e.message)}};
 
@@ -16,7 +17,7 @@
     try{history.replaceState(null,'',visible()?'/drive':'/')}catch{}
     app.mountMap(visible()?$('#driveMapStage'):null);
     if(visible()){startCamera();resizeRadar()}
-    else{clearTimeout(cameraTimer);cameraRequest?.abort();app.redraw()}
+    else{if(!cameraWanted()){clearTimeout(cameraTimer);cameraRequest?.abort()}app.redraw()}
     renderStatus();
   }
   function resizeRadar(){
@@ -50,15 +51,19 @@
     $('#cameraOverlay').hidden=fresh;
     if(!fresh)$('#cameraOverlay').textContent=cameraEnabled?(frameAt?'Kamerabild nicht aktuell. Steuerung angehalten.':'Kamera wird verbunden …'):'Livebild pausiert';
     $('#cameraFrame').style.opacity=fresh?'1':'.2';
+    $('#goalCamera').style.opacity=fresh?'1':'.2';
+    $('#goalCameraStatus').textContent=$('#cameraStatus').textContent;
+    $('#goalCameraOverlay').hidden=fresh;
+    $('#goalCameraOverlay').textContent=fresh?'':'Kamerabild nicht aktuell · Verbindung wird erneuert';
   }
   function stopForStaleVideo(){
-    if(visible()&&!frameFresh()&&app.ownsControl()&&!stoppingForVideo){
+    if(cameraWanted()&&!frameFresh()&&app.ownsControl()&&!stoppingForVideo){
       stoppingForVideo=true;app.stop().catch(()=>{}).finally(()=>stoppingForVideo=false);
       app.toast('Kamerabild nicht aktuell – Roboter gestoppt');
     }
   }
   async function nextFrame(){
-    if(cameraBusy||!visible()||!cameraEnabled||document.hidden)return;
+    if(cameraBusy||!cameraWanted()||!cameraEnabled||document.hidden)return;
     cameraBusy=true;let delay=65,url=null;
     try{
       cameraRequest=new AbortController();const timer=setTimeout(()=>cameraRequest?.abort(),3200);
@@ -67,8 +72,8 @@
       const sequence=Number(response.headers.get('X-Frame-Sequence')),age=Number(response.headers.get('X-Frame-Age-Ms'));
       if(!Number.isFinite(sequence)||!Number.isFinite(age)||age>=700)throw Error('Bild veraltet');
       const blob=await response.blob();
-      if(!visible()||!cameraEnabled||document.hidden)return;
-      url=URL.createObjectURL(blob);const image=$('#cameraFrame');image.src=url;await image.decode();
+      if(!cameraWanted()||!cameraEnabled||document.hidden)return;
+      url=URL.createObjectURL(blob);const image=$('#goalDialog').open?$('#goalCamera'):$('#cameraFrame');$('#cameraFrame').src=url;$('#goalCamera').src=url;await image.decode();
       const old=frameURL;frameURL=url;url=null;if(old)URL.revokeObjectURL(old);
       if(sequence!==lastSequence){lastSequence=sequence;frameAt=performance.now();framesShown++}
       const now=performance.now();if(now-rateAt>=1000){displayFPS=Math.round(framesShown*1000/(now-rateAt));framesShown=0;rateAt=now}
@@ -76,7 +81,7 @@
     finally{
       if(url)URL.revokeObjectURL(url);
       cameraRequest=null;cameraBusy=false;renderStatus();stopForStaleVideo();
-      if(visible()&&cameraEnabled&&!document.hidden)cameraTimer=setTimeout(nextFrame,delay);
+      if(cameraWanted()&&cameraEnabled&&!document.hidden)cameraTimer=setTimeout(nextFrame,delay);
     }
   }
   function startCamera(){clearTimeout(cameraTimer);if(cameraEnabled&&!document.hidden)nextFrame()}
@@ -127,12 +132,13 @@
   $('#driveZoomIn').onclick=()=>{if(followMap)app.freezeMap();followMap=false;app.zoomMap(1.3)};
   $('#driveZoomOut').onclick=()=>{if(followMap)app.freezeMap();followMap=false;app.zoomMap(1/1.3)};
   $('#driveMapStage').addEventListener('pointerdown',()=>{if(followMap)app.freezeMap();followMap=false},true);
+  document.addEventListener('goal-visibility',()=>{if(cameraWanted()){cameraEnabled=true;startCamera()}else{clearTimeout(cameraTimer);cameraRequest?.abort()}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden){cameraRequest?.abort();clearTimeout(cameraTimer)}else startCamera()});
   window.addEventListener('pagehide',()=>{cameraRequest?.abort();clearTimeout(cameraTimer)});
   window.MatebotCockpit={visible,frameFresh,resetControls,followMap:()=>visible()&&followMap,
     onState:s=>{latest=s;renderStatus();drawRadar();if(!app.canDrive()&&(stickPointer!==null||sidePointers.size))app.endManual()},
     onDisconnect:()=>{latest={...latest,blocked:'Verbindung unterbrochen',estop:true};renderStatus()}};
-  setInterval(()=>{if(visible()){renderStatus();stopForStaleVideo()}},150);
+  setInterval(()=>{if(cameraWanted()){renderStatus();stopForStaleVideo()}},150);
   let preference=null;try{preference=localStorage.getItem('matebot.view')}catch{}
   setView(location.pathname==='/drive'?'drive':preference|| (matchMedia('(max-width:800px)').matches?'drive':'map'),false);
 })();

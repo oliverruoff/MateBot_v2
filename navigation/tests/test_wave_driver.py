@@ -15,6 +15,7 @@ class DMA:
         self.live.discard(wave)
     def write(self,*_):pass
     def wave_add_generic(self,pulses):self.duration=sum(p[2] for p in pulses)/1e6
+    def wave_create_and_pad(self,percent):return self.wave_create()
     def wave_create(self):self.next+=1;self.live.add(self.next);return self.next
     def wave_send_using_mode(self,wave,mode):
         self.modes.append(mode)

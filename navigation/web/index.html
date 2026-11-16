@@ -53,7 +53,7 @@
   <div class="mapwrap">
     <canvas id="map" aria-label="Karte mit Raster, Sperrzonen und Roboterposition"></canvas>
     <div id="empty"><span>⌖</span><h2>Hier entsteht deine Karte.</h2><p>Mit der manuellen Steuerung langsam durch die Räume fahren.<br>Die Karte wird dabei automatisch erweitert und gespeichert.</p></div>
-    <div class="maptoolbar"><button id="zoomIn" aria-label="Vergrößern">+</button><button id="zoomOut" aria-label="Verkleinern">−</button><button id="fit">Einpassen</button><label><input id="showGrid" type="checkbox" checked> Raster</label></div>
+    <div class="maptoolbar"><button id="zoomIn" aria-label="Vergrößern">+</button><button id="zoomOut" aria-label="Verkleinern">−</button><button id="fit">Einpassen</button><button id="panMap" aria-pressed="false" title="Karte verschieben statt Ziel setzen">Verschieben</button><label><input id="showGrid" type="checkbox" checked> Raster</label></div>
     <div id="zoneTools" class="zoneTools" hidden><strong>Sperrzonen zeichnen</strong><div class="segmented"><button id="paint" class="active">Sperren</button><button id="erase">Freigeben</button></div><label>Zellengröße <select id="gridSize"><option value="0.1">10 cm</option><option value="0.25" selected>25 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option></select></label><small>Klicken oder ein Rechteck ziehen. Änderungen werden sofort gespeichert.</small></div>
     <div id="positionHelp" class="positionHelp" hidden><strong>Wo steht Matebot?</strong><span>Position anklicken und in Blickrichtung ziehen.</span><button id="lastPosition">Steht noch an der letzten Position</button><button id="cancelPosition">Abbrechen</button></div>
     <div class="legend"><i class="wall"></i> Wand <i class="free"></i> Frei <i class="forbidden"></i> Sperrzone <i class="robot"></i> Matebot</div><div id="scale">1 m</div>
@@ -62,8 +62,16 @@
 </main>
 <div id="toast" role="alert" hidden></div>
 <dialog id="armDialog"><h2>Steuerung freigeben</h2><p id="armText">Der Roboter fährt nur bei aktiver Verbindung. Manuell: Tasten gedrückt halten.</p><label class="check"><input id="onSite" type="checkbox"> Ich bin vor Ort; der Fahrbereich und Treppen sind abgesichert.</label><div class="dialogbuttons"><button data-close="armDialog">Abbrechen</button><button id="armNow" class="primary">Freigeben</button></div></dialog>
-<dialog id="goalDialog"><h2>Ziel auf der Karte</h2><p id="goalText">Matebot plant einen Weg über bekannte freie Flächen.</p><label class="field">Optional als Ziel speichern<input id="favoriteName" placeholder="Zum Beispiel Küche" maxlength="40"></label><div class="dialogbuttons"><button data-close="goalDialog">Schließen</button><button id="saveFavorite">Ziel speichern</button><button id="confirmGoal" class="primary">Hierhin fahren →</button></div></dialog>
+<dialog id="goalDialog" class="goalDialog">
+  <div class="goalHeading"><div><small>POINT &amp; CLICK</small><h2>Ziel &amp; Blickrichtung</h2></div><button id="goalClose" aria-label="Zielansicht schließen">✕</button></div>
+  <p id="goalText">Pfeil ziehen: So soll Matebot am Ziel stehen.</p>
+  <div class="goalLayout"><section class="goalDirection"><canvas id="goalPreview" aria-label="Zielvorschau: Pfeil in gewünschte Blickrichtung ziehen"></canvas><div class="headingControl"><label>Ausrichtung <output id="goalHeadingValue">0°</output><input id="goalHeading" type="range" min="0" max="359" value="0"></label><button id="goalFaceRobot">Zum Roboter</button></div></section>
+  <section class="goalVideo"><div class="goalVideoHead"><span>Livekamera</span><b id="goalCameraStatus">VERBINDET</b></div><div class="goalVideoStage"><img id="goalCamera" alt="Livekamera während der Zielfahrt"><span id="goalCameraOverlay">Kamera wird verbunden …</span></div></section></div>
+  <div class="goalMission" role="status"><strong id="goalMissionText">Ziel gewählt</strong><span id="goalNavigationStatus">Navigation wird vorbereitet …</span></div>
+  <details class="goalSave"><summary>Dieses Ziel speichern</summary><label class="field">Name<input id="favoriteName" placeholder="Zum Beispiel Küche" maxlength="40"></label><button id="saveFavorite">Position &amp; Richtung speichern</button></details>
+  <div class="goalActions"><button id="goalStop" class="stop">■ STOPP</button><button id="confirmGoal" class="primary">Losfahren →</button></div>
+</dialog>
 <dialog id="newDialog"><h2>Neue Karte beginnen?</h2><p>Die bisherige Karte mit ihren Sperrzonen wird archiviert. Eine neue Karte startet am aktuellen Standort. Dabei bleiben die Motoren gestoppt.</p><div class="dialogbuttons"><button data-close="newDialog">Abbrechen</button><button id="newNow" class="primary">Neue Karte starten</button></div></dialog>
 <dialog id="checksDialog"><h2>Fahrprüfung bestätigen</h2><p>Nur selbst durchgeführte Prüfungen bestätigen. Erst nach allen vier Prüfungen kann der Zielmodus freigegeben werden.</p><label class="check"><input id="checksOnSite" type="checkbox"> Ich habe die angekreuzten Prüfungen vor Ort durchgeführt.</label><div class="dialogbuttons"><button data-close="checksDialog">Abbrechen</button><button id="checksNow" class="primary">Speichern</button></div></dialog>
-<script src="/assets/drive_math.js"></script><script src="/assets/app.js"></script><script src="/assets/drive_ui.js"></script>
+<script src="/assets/drive_math.js"></script><script src="/assets/app.js"></script><script src="/assets/drive_ui.js"></script><script src="/assets/goal_ui.js"></script>
 </body></html>

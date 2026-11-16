@@ -26,6 +26,7 @@ from geometry_msgs.msg import Twist, TransformStamped
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry, OccupancyGrid, Path as RosPath
 from nav2_msgs.action import NavigateToPose
+from lifecycle_msgs.srv import GetState
 from slam_toolbox.srv import SerializePoseGraph, DeserializePoseGraph, Reset
 from tf2_ros import TransformBroadcaster, Buffer, TransformListener
 from waitress import serve
@@ -37,6 +38,7 @@ from spatial import overlay_indices, zone_collision, laser_to_base, self_return,
 from api import create_app
 from localization import ScanMatcher, angle_delta
 from wave_driver import WaveDriver
+from goal_geometry import arrival_error
 
 ROOT = Path(__file__).parent
 DATA = Path('/data')
@@ -103,6 +105,7 @@ class Bridge(Node):
             raise RuntimeError('pigpiod nicht erreichbar; kein Simulations-Fallback')
         for p in CFG['step_pins'] + CFG['direction_pins'] + [CFG['enable_pin']]:
             self.pi.set_mode(p, pigpio.OUTPUT)
+        self.pi.wave_tx_stop();self.pi.wave_clear()
         self.wave_driver=WaveDriver(self.pi,CFG,pigpio.pulse)
         self.stop_hardware()
         self.tf = TransformBroadcaster(self)
@@ -118,6 +121,12 @@ class Bridge(Node):
         self.create_subscription(OccupancyGrid, 'slam_map', self.receive_map, qos)
         self.create_subscription(RosPath, 'plan', self.receive_path, 1)
         self.navigator = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        self.nav_state_client=self.create_client(GetState,'/bt_navigator/get_state')
+        self.collision_state_client=self.create_client(GetState,'/collision_monitor/get_state')
+        self.nav_ready=False
+        self.nav_status='Navigation ist ausgeschaltet'
+        self.goal_target=None
+        self.goal_distance=None
         self.serialize = self.create_client(SerializePoseGraph, '/slam_toolbox/serialize_map')
         self.deserialize = self.create_client(DeserializePoseGraph, '/slam_toolbox/deserialize_map')
         self.reset_client=self.create_client(Reset,'/slam_toolbox/reset')
@@ -138,20 +147,30 @@ class Bridge(Node):
             time.sleep(max(.002,.02-(time.monotonic()-started)))
 
     def navigation_loop(self):
-        process=None
+        process=None;settled=0
         try:
             while self.running:
                 wanted=self.annotations['mode']=='navigation' and self.navigation_ready()
                 if wanted and process is None:
+                    self.nav_ready=False;settled=0;self.nav_status='Navigation startet …'
                     process=subprocess.Popen(['ros2','launch','nav2_bringup','navigation_launch.py',
                         'params_file:=/data/nav2.yaml','use_sim_time:=false','autostart:=true','use_composition:=False'],start_new_session=True)
                 elif not wanted and process is not None:
+                    self.nav_ready=False;self.nav_status='Navigation ist ausgeschaltet'
                     os.killpg(process.pid,signal.SIGINT)
                     try:process.wait(timeout=10)
                     except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
                     process=None
                 if process is not None and process.poll() is not None:
                     process=None
+                if wanted and process is not None:
+                    try:
+                        active=self.nav_state_client.service_is_ready() and self.wait_future(self.nav_state_client.call_async(GetState.Request()),2).current_state.id==3
+                        collision_active=self.collision_state_client.service_is_ready() and self.wait_future(self.collision_state_client.call_async(GetState.Request()),2).current_state.id==3
+                        settled=settled+1 if active and collision_active and getattr(self,'map_correction_age',99)<1. else 0
+                        self.nav_ready=bool(settled>=2 and self.navigator.server_is_ready())
+                        self.nav_status='Navigation bereit' if self.nav_ready else 'Navigation startet …'
+                    except Exception:self.nav_ready=False
                 time.sleep(1)
         finally:
             if process is not None and process.poll() is None:
@@ -235,6 +254,7 @@ class Bridge(Node):
             if reason:raise ValueError(reason)
             token=self.lease.acquire(time.monotonic())
             self.estop=False
+            self.error=''
             self.command=[0.,0.,0.]
             self.burst_pulses=0
             self.burst_exhausted=False
@@ -296,9 +316,9 @@ class Bridge(Node):
             self.refresh_annotations()
             return self.annotations
 
-    def favorite(self,name,x,y,delete=False):
+    def favorite(self,name,x,y,delete=False,heading=None):
         with self.lock:
-            self.session.favorite(name,x,y,delete)
+            self.session.favorite(name,x,y,delete,heading)
             self.refresh_annotations()
             return self.annotations
 
@@ -372,6 +392,11 @@ class Bridge(Node):
 
     def stop(self,reason='Gestoppt'):
         with self.lock:
+            now=time.monotonic()
+            if not self.estop or reason not in ('Gestoppt','Einstellungen geändert – erneut freigeben'):
+                record=dict(reason=reason,at=time.time(),scan_age=now-self.scan_at,imu_age=now-self.imu_at,pose_age=(self.pose or {}).get('age'),lease_age=now-self.lease.at)
+                self.stop_history=(getattr(self,'stop_history',[])+[record])[-12:]
+                self.get_logger().info('Motion stop: '+json.dumps(record))
             self.estop = True
             self.stop_reason=reason
             self.manual_warning=''
@@ -417,7 +442,7 @@ class Bridge(Node):
                 self.stop('Verbindung zur Steuerung abgelaufen – gestoppt')
             if not self.estop:
                 reason=self.reason()
-                if reason=='Hindernis im Fahrweg – gestoppt' and self.annotations['mode']=='mapping':
+                if reason=='Hindernis im Fahrweg – gestoppt':
                     self.command=[0.,0.,0.]
                     self.applied_cmd=[0.,0.,0.]
                     self.manual_warning='Hindernis in dieser Fahrtrichtung · andere Richtung möglich'
@@ -623,16 +648,21 @@ class Bridge(Node):
 
     def update_pose(self):
         try:
-            tf = self.buffer.lookup_transform('map', 'base_link', Time())
-            age = (self.get_clock().now().nanoseconds -
-                   (tf.header.stamp.sec*10**9+tf.header.stamp.nanosec))/1e9
-            self.pose = {'x': tf.transform.translation.x, 'y': tf.transform.translation.y,
-                         'yaw': yaw(tf.transform.rotation), 'age': age}
-            if time.monotonic()-getattr(self,'last_persist',0)>10:
-                self.last_persist=time.monotonic()
-                self.persist_runtime()
+            # map->odom is a correction, unchanged between matched SLAM scans.
+            # Compose it with CURRENT odometry, not historical odometry at its stamp.
+            tf=self.buffer.lookup_transform('map','odom',Time())
+            correction=yaw(tf.transform.rotation)
+            with self.lock:
+                now=time.monotonic();x,y,heading=self.x,self.y,self.heading
+                age=max(now-self.last_tick,now-self.imu_at,now-self.scan_at)
+                self.pose=dict(x=tf.transform.translation.x+x*math.cos(correction)-y*math.sin(correction),
+                    y=tf.transform.translation.y+x*math.sin(correction)+y*math.cos(correction),
+                    yaw=angle_delta(correction+heading,0),age=age)
+                self.map_correction_age=max(0.,(self.get_clock().now().nanoseconds-(tf.header.stamp.sec*10**9+tf.header.stamp.nanosec))/1e9)
+            if now-getattr(self,'last_persist',0)>10:
+                self.last_persist=now;self.persist_runtime()
         except Exception:
-            self.pose = None
+            self.pose=None
 
     def receive_path(self, msg):
         self.path = [[p.pose.position.x, p.pose.position.y] for p in msg.poses]
@@ -659,6 +689,8 @@ class Bridge(Node):
                         saved_at=self.saved_at, goal_status=self.goal_status,
                         gyro_bias=self.gyro_bias,
                         error=self.error, localized=self.localized,
+                        stop_history=getattr(self,'stop_history',[]),navigation_ready=getattr(self,'nav_ready',False),navigation_status=getattr(self,'nav_status','Navigation startet …'),map_correction_age=getattr(self,'map_correction_age',None),
+                        goal_target=getattr(self,'goal_target',None),goal_distance=getattr(self,'goal_distance',None),goal_error=getattr(self,'goal_error',''),
                         saved_map=self.active_snapshot() is not None,
                         annotations=self.annotations, control_active=self.lease.token is not None,
                         self_points=self.self_points, last_pose=self.read_runtime().get('pose'),
@@ -847,7 +879,18 @@ class Bridge(Node):
                 self.localization_status='Automatische Ortung wird erneut versucht'
                 self.get_logger().warning('Localization: '+str(exc))
 
-    def goal(self, x, y,token):
+    def goal_preview(self,x,y,heading):
+        with self.lock:
+            grid=self.map_json();obstacles=[]
+            if self.localized and self.pose:
+                pose=self.pose;c,s=math.cos(pose['yaw']),math.sin(pose['yaw'])
+                obstacles=[(pose['x']+px*c-py*s,pose['y']+px*s+py*c) for px,py in self.base_points]
+            reason=arrival_error(grid,x,y,heading,CFG,obstacles)
+            radius=math.hypot(CFG['footprint_length'],CFG['footprint_width'])/2+.05
+            if not reason and zone_collision(x,y,radius,self.zones,self.annotations['grid_size']):reason='Der Roboter würde in eine Sperrzone ragen'
+            return dict(valid=not reason,reason=reason)
+
+    def goal(self, x, y,token,heading=0.):
         with self.lock:
             self.lease.check(token,time.monotonic())
             if self.annotations['mode']!='navigation':raise ValueError('Bitte zuerst den Zielmodus wählen')
@@ -856,6 +899,8 @@ class Bridge(Node):
                 raise ValueError(reason)
             if self.goal_pending or self.goal_handle:
                 raise ValueError('Ziel läuft bereits – zuerst stoppen')
+            preview=self.goal_preview(x,y,heading)
+            if not preview['valid']:raise ValueError(preview['reason'])
             if not self.pose or self.pose['age']>0.5 or self.map is None:
                 raise ValueError('Karte oder aktuelle Position fehlen')
             m = self.map
@@ -872,16 +917,21 @@ class Bridge(Node):
             radius=math.hypot(CFG['footprint_length'],CFG['footprint_width'])/2+.05
             if zone_collision(x,y,radius,self.zones,self.annotations['grid_size']):
                 raise ValueError('Ziel liegt in oder zu nah an einer Sperrzone')
-            if not self.navigator.server_is_ready():
-                raise ValueError('Navigation noch nicht bereit')
+            if not getattr(self,'nav_ready',False):
+                raise ValueError('Navigation startet noch – bitte kurz warten')
             goal = NavigateToPose.Goal()
             goal.pose.header.frame_id='map'
             goal.pose.header.stamp=self.get_clock().now().to_msg()
             goal.pose.pose.position.x,goal.pose.pose.position.y=x,y
-            goal.pose.pose.orientation.w=1.0
+            goal.pose.pose.orientation.z=math.sin(heading/2)
+            goal.pose.pose.orientation.w=math.cos(heading/2)
+            self.goal_error=''
+            self.goal_target=dict(x=x,y=y,yaw=heading)
+            self.goal_distance=None
+            self.goal_status='Route wird geplant'
             self.goal_pending=True
             generation = self.goal_generation
-            f=self.navigator.send_goal_async(goal)
+        f=self.navigator.send_goal_async(goal,feedback_callback=self.goal_feedback)
         try:
             handle=self.wait_future(f,5)
         except Exception:
@@ -909,12 +959,18 @@ class Bridge(Node):
                 lambda future: self.goal_result(future,generation))
         return {'accepted':True}
 
+    def goal_feedback(self,message):
+        with self.lock:
+            if self.goal_pending or self.goal_handle:
+                self.goal_distance=float(message.feedback.distance_remaining)
+
     def goal_result(self, future, generation):
         with self.lock:
             if generation!=self.goal_generation:
                 return
             self.goal_handle=None
-            status=future.result().status
+            result=future.result();status=result.status
+            self.goal_error=getattr(getattr(result,'result',None),'error_msg','')
             self.goal_status={4:'Ziel erreicht',5:'Abgebrochen',6:'Kein sicherer Weg gefunden'}.get(status,'Beendet')
             self.command=[0.,0.,0.]
             self.stop_hardware()

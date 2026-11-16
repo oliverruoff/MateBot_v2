@@ -80,12 +80,26 @@ zuverlässig, und Positionsfehler können eine digitale Grenze verschieben.
 
 ## Ziele und Favoriten
 
-**Ziele** wählen, eine bekannte freie Stelle anklicken und bei Bedarf einen Namen
-speichern. Favoriten bleiben auch nach Neustart erhalten. Nach den vier
-bestätigten Bodenprüfungen: **Hierhin fahren**
-wählen. Nav2 plant um Wände und Sperrzonen, lokale Costmaps berücksichtigen den
-aktuellen LiDAR. Nicht erreichbare Ziele werden abgebrochen. Es wird kein Weg
-durch unbekannte Kartenbereiche geplant. Stopp ist jederzeit erreichbar.
+**Ziele** wählen und eine bekannte freie Stelle antippen. Direktes Ziehen von der
+Zielposition in eine Richtung setzt bereits den Ankunftswinkel. Im Popup kann der
+Pfeil auf der vergrößerten Kartenansicht gezogen oder die Ausrichtung mit dem
+Regler gradweise verändert werden. Ein Umriss zeigt die Roboterfläche, eine
+gestrichelte Kontur den benötigten Platz einschließlich Ankunftstoleranz. Vor
+dem Start prüft der Server Karte, aktuelle Hindernisse und Sperrzonen für die
+gesamte Zielausrichtung. Unbekannte oder zu enge Bereiche werden mit einem
+konkreten Hinweis abgelehnt. **Verschieben** schaltet die Karte bei Bedarf
+auf Schieben statt Zielsetzen; am Computer funktioniert auch Shift + Ziehen.
+
+**Losfahren** wartet auf eine aktive Nav2-Navigation und plant dann den Weg um
+Wände, Hindernisse und Sperrzonen. Das Popup bleibt offen: Livekamera, Fahrtstatus,
+verbleibende Wegstrecke und STOPP sind direkt sichtbar. Schließen oder Escape stoppt
+eine laufende oder noch vorbereitete Fahrt. Nicht erreichbare Ziele zeigen einen
+Fehler im Popup. Es wird kein Weg durch unbekannte Kartenbereiche geplant.
+
+Die vier Bodenprüfungen bleiben Voraussetzung für autonome Fahrt. Unter
+**Dieses Ziel speichern** werden Name, Position und Blickrichtung gespeichert;
+ältere Favoriten ohne Winkel bleiben nutzbar. Nach Ankunft kann dieselbe Position
+mit anderer Blickrichtung erneut angefahren werden.
 
 ## Speicherung / Wiederanlauf
 

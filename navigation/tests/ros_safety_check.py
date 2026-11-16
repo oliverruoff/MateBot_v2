@@ -33,6 +33,7 @@ class FakeGPIO:
     def wave_send_using_mode(self,wave,mode):self.wave_send_once(wave)
     def wave_delete(self,*_):pass
     def wave_add_generic(self,pulses):self.pending=pulses
+    def wave_create_and_pad(self,percent):return self.wave_create()
     def wave_create(self):return 1
     def wave_send_once(self,_):self.sent.append(self.pending)
     def stop(self):pass
@@ -111,14 +112,14 @@ class ROSMotorInterlockTests(unittest.TestCase):
         msg=Twist();msg.linear.x=.03;r.velocity(msg)
         self.assertEqual(r.command,[0.,0.,0.])
     def test_obstacle_blocks_only_motion_towards_it_and_keeps_same_owner(self):
-        r=self.robot;token=r.take_control('mapping')['token'];r.base_points=[(.28,0.)]
+        r=self.robot;token=r.take_control('mapping')['token'];r.base_points=[(.26,0.)]
         result=r.manual(token,.03,0.,0.,1)
         self.assertIn('Hindernis',result['blocked'])
         self.assertFalse(r.estop);self.assertEqual(r.lease.token,token)
         self.assertEqual(r.command,[0.,0.,0.]);self.assertFalse(r.pi.sent)
         r.manual(token,-.02,0.,0.,2)
         self.assertEqual(r.command,[-.02,0.,0.])
-        r.base_points=[];r.manual(token,.03,0.,0.,3);r.base_points=[(.28,0.)]
+        r.base_points=[];r.manual(token,.03,0.,0.,3);r.base_points=[(.26,0.)]
         self.advance();r.tick()
         self.assertFalse(r.estop);self.assertEqual(r.command,[0.,0.,0.])
         r.manual(token,-.02,0.,0.,4)
@@ -145,7 +146,45 @@ class ROSMotorInterlockTests(unittest.TestCase):
         from spatial import self_return,obstacle_risk
         self.assertTrue(self_return(.236,-.012,bridge.CFG))
         self.assertFalse(self_return(.28,0.,bridge.CFG))
-        self.assertTrue(obstacle_risk([(.28,0.)],bridge.CFG,[.03,0.,0.]))
+        self.assertTrue(obstacle_risk([(.26,0.)],bridge.CFG,[.03,0.,0.]))
+    def test_navigation_goal_transmits_selected_orientation(self):
+        class ResultFuture:
+            def add_done_callback(self,callback):self.callback=callback
+        class Handle:
+            accepted=True
+            def cancel_goal_async(self):pass
+            def get_result_async(self):return ResultFuture()
+        class GoalFuture:
+            def done(self):return True
+            def result(self):return Handle()
+        class Navigator:
+            def server_is_ready(self):return True
+            def send_goal_async(self,goal,feedback_callback=None):
+                self.goal=goal;self.feedback=feedback_callback;return GoalFuture()
+        r=self.robot;r.annotations['mode']='navigation'
+        r.annotations['calibration']={k:True for k in r.annotations['calibration']}
+        r.navigator=Navigator();r.nav_ready=True
+        m=OccupancyGrid();m.info.width=m.info.height=80;m.info.resolution=.05
+        m.info.origin.position.x=m.info.origin.position.y=-2.;m.info.origin.orientation.w=1.;m.data=[0]*6400;r.map=m
+        token=r.take_control('navigation')['token'];r.goal(.5,.1,token,heading=1.2)
+        q=r.navigator.goal.pose.pose.orientation
+        self.assertAlmostEqual(q.z,math.sin(.6));self.assertAlmostEqual(q.w,math.cos(.6))
+        self.assertEqual(r.goal_target,dict(x=.5,y=.1,yaw=1.2))
+    def test_old_map_correction_composes_with_current_odometry(self):
+        from geometry_msgs.msg import TransformStamped
+        r=self.robot;tf=TransformStamped()
+        tf.header.stamp.sec=int(r.get_clock().now().nanoseconds/1e9)-10
+        tf.transform.translation.x=1.;tf.transform.translation.y=2.
+        tf.transform.rotation.z=math.sin(.2);tf.transform.rotation.w=math.cos(.2)
+        class Buffer:
+            def lookup_transform(self,parent,child,stamp):
+                assert (parent,child)==('map','odom');return tf
+        r.buffer=Buffer();r.x=.2;r.y=.1;r.heading=.3;r.last_persist=self.now[0]
+        r.update_pose()
+        self.assertAlmostEqual(r.pose['x'],1.+.2*math.cos(.4)-.1*math.sin(.4))
+        self.assertAlmostEqual(r.pose['y'],2.+.2*math.sin(.4)+.1*math.cos(.4))
+        self.assertAlmostEqual(r.pose['yaw'],.7)
+        self.assertLess(r.pose['age'],.1);self.assertGreater(r.map_correction_age,9.)
     def test_no_go_edit_cancels_owner_and_overlays_planner_map(self):
         r=self.robot;r.arm('mapping',True)
         m=OccupancyGrid();m.info.width=m.info.height=80;m.info.resolution=.05

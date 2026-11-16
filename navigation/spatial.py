@@ -58,7 +58,7 @@ def obstacle_risk(points,cfg,cmd):
     vx,vy,wz=cmd
     if max(abs(vx),abs(vy),abs(wz))<1e-5:return False
     length,width=cfg['footprint_length'],cfg['footprint_width']
-    margin=.07
+    margin=cfg.get('obstacle_margin',.04)
     for x,y in points:
         before=rectangle_clearance(x,y,length,width)
         for dt in (.10,.25,.50,.75):

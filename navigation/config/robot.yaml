@@ -30,6 +30,8 @@ lidar_yaw: -1.5707963267948966
 # Repeated self return at body (0.236,-0.012): include 4 cm near-range error.
 # Masked rays stay unknown; Nav2's collision circle includes this padded outline.
 self_filter_padding: 0.04
+obstacle_margin: 0.04
+goal_position_tolerance: 0.06
 camera_rotation: 180
 camera_yaw: 0.0
 # Nominal Camera Module v1 field of view; orientation aid, not pixel calibration.

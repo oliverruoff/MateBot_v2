@@ -19,6 +19,10 @@ class FakeRobot:
         if token!='test-lease':raise ValueError('Steuerung abgelaufen')
         self.calls.append(('manual',values))
     def stop(self):self.calls.append(('stop',))
+    def goal(self,x,y,token,heading=0.):
+        if token!='test-lease':raise ValueError('Steuerung abgelaufen')
+        self.calls.append(('goal',x,y,heading));return dict(accepted=True)
+    def goal_preview(self,x,y,heading):return dict(valid=True,reason='')
 
 
 class APITests(unittest.TestCase):
@@ -30,6 +34,20 @@ class APITests(unittest.TestCase):
     def test_cross_origin_form_cannot_move_or_arm(self):
         response=self.client.post('/api/manual',json={'vx':.01,'vy':0,'wz':0})
         self.assertEqual(response.status_code,403)
+        self.assertEqual(self.robot.calls,[])
+
+    def test_goal_keeps_selected_heading_and_rejects_nan(self):
+        headers={**self.headers,'X-Matebot-Lease':'test-lease'}
+        response=self.client.post('/api/goal',json=dict(x=1,y=2,yaw=1.57),headers=headers)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(self.robot.calls,[('goal',1.,2.,1.57)])
+        response=self.client.post('/api/goal',json=dict(x=1,y=2,yaw=float('nan')),headers=headers)
+        self.assertEqual(response.status_code,409)
+
+    def test_arrival_preview_does_not_acquire_control_or_move(self):
+        response=self.client.post('/api/goal-preview',json=dict(x=1,y=2,yaw=.7),headers=self.headers)
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(response.json['valid'])
         self.assertEqual(self.robot.calls,[])
 
     def test_release_does_not_assume_operator_presence(self):

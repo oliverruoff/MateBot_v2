@@ -5,6 +5,44 @@ Original software, its modified files and logs remain intact. Pre-change archive
 are stored under `/home/matebot/backups/`. No credentials or floor-plan data are
 included in the source repository.
 
+## Point-and-click arrival pose and live mission popup (2026-11-16)
+
+- Map tap selects a target; map drag also sets arrival yaw. The modal permits
+  dragging its direction arrow and fine adjustment with a degree slider. It shows
+  robot footprint, clearance, live camera, navigation startup, remaining route
+  distance, arrival/failure state, and STOP. Closing cancels preparation/running
+  motion. Position and yaw persist together in favorites; old favorites remain valid.
+- `/api/goal-preview` is read-only and validates the entire oriented footprint,
+  known map cells, current scan obstacles (only with a known pose), keepouts,
+  and the 6-cm position tolerance. The UI shows the robot and clearance envelope. The goal endpoint revalidates at start.
+- Arrival yaw reaches the actual NavigateToPose quaternion. Readiness requires
+  active bt_navigator AND collision_monitor, not merely an advertised action server.
+  An isolated test reproduced inactive action-server rejection before this check.
+- Wave allocations now use two equal padded DMA slots (wave_create_and_pad(50)),
+  with exclusive startup cleanup. A 60-second resource-only hardware check, with
+  STEP outputs held low, completed 751 waves without allocation exhaustion. A
+  short real pulse-timing check passed. Two earlier long pulse checks were aborted
+  by the disabled-enable invariant; do not count them as passing timing tests.
+- Latest map->odom correction is composed with current odometry; a historical
+  correction stamp no longer selects historical robot odometry or creates a false
+  stale-position stop. A ROS regression test checks a 10-second-old correction.
+- Local Nav2 footprint uses the padded rectangle and ObstacleFootprint critic;
+  angular sampling includes zero. Bridge and footprint margins are aligned. Final
+  xy/yaw tolerances are 6 cm / 0.12 rad; planner tolerance is 5 cm. A directional
+  obstacle block preserves the navigation lease rather than producing expired-session
+  cascades, and the mission panel explains the blockage.
+- Full Nav2 closed-loop test on isolated ROS domain 146, with simulated odometry,
+  scans, and no GPIO: actual production stack reached (0.35,0,1.0 rad) with final
+  position error 5.5 cm, yaw error 0.116 rad, action status 4 and 230 nonzero commands.
+- Browser mock-robot test verifies map-drag heading, delayed arrival clearance check,
+  degree adjustment (359 degrees transmitted exactly), and camera remaining in the
+  mobile mission modal. No real robot movement was commanded on the resumed day.
+- Last bounded physical test before the pause reached about 9 cm of its target but
+  did not finish yaw because the obstacle guard blocked final motion. This is NOT
+  a passing physical arrival test. On resumption automatic localization remained
+  uncertain with competing map matches; physical validation is pending position
+  clarification. No weak scan match was promoted to a confident position.
+
 ## Smooth motion and heading-up map (latest)
 
 - Replaced 80-ms waves launched on a 50-ms ROS timer (inherently leaving gaps)
