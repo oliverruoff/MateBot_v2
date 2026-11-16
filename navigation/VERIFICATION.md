@@ -5,6 +5,35 @@ Original software, its modified files and logs remain intact. Pre-change archive
 are stored under `/home/matebot/backups/`. No credentials or floor-plan data are
 included in the source repository.
 
+## Continuous PWM output (2026-11-16, subsequent drive investigation)
+
+- Default motor output is now continuous pigpio PWM (`motor_output: pwm`), with
+  50% duty as in the old MateBot. An unchanged command does not restart PWM,
+  change frequency or toggle enable. A direction change stops the affected
+  wheel before changing DIR. Finite waves remain an explicit configuration fallback.
+- A native pigpiod script owns the outputs. Even/odd command generations prevent
+  incomplete frames from starting outputs or refreshing the watchdog. STOP waits
+  for an all-zero output acknowledgement; a missing controller refresh stops all
+  four PWM outputs after approximately 300 ms. A stopped active watchdog rejects
+  automatic restart. Owned script IDs are reclaimed after controller restart.
+- Available PWM frequency bins are discovered with outputs off. Selected rates
+  respect linear/angular speed limits. Commanded odometry uses those selected
+  rates rather than claiming exact requested speed or measured chassis travel.
+- Independent read-only CPU sampling of GPIO registers on the real Pi observed
+  all four pins with exactly 1,312 rising edges each at 1,000 Hz. Rising-edge
+  periods were about 999.6–1000.5 microseconds through repeated command refreshes;
+  there were no 80-ms block gaps. Fifty refreshes caused one output-rate change.
+- Actual active PWM was allowed to expire without a Python STOP call: all duties
+  became zero and the native script halted. The expired driver rejected restart.
+  Reclaiming an owned script and closing a running script were tested on the Pi.
+- Six-direction physical tests used independently sampled gyro and LiDAR. They
+  still show insufficient translation and unwanted yaw; reliable floor driving
+  is NOT validated and no physical arrival is claimed. Continuous output is a
+  verified software change, not proof that the overall drive fault is solved.
+- Validation: 41 Python unit tests, four Node math tests and 15 isolated ROS
+  safety checks pass. The PWM script tests cover uninterrupted identical frames,
+  partial-frame timeout, acknowledged stop, per-wheel reversal and rate limits.
+
 ## Unified cockpit and real drive investigation (2026-11-16, follow-up)
 
 - One responsive cockpit now contains the house map, live camera, joystick and

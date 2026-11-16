@@ -193,9 +193,14 @@ wird bei stillstehendem Start neu bestimmt.
 Eine kurzlebige Steuerungskennung gehört genau einem Browser. Andere Leser
 verlängern sie nicht. Die Steuerungskennung verfällt nach 2,5 s ohne gültiges Paket; manuelle
 Bewegungsbefehle verfallen bereits nach 500 ms. Sequenznummern verhindern, dass verspätete Fahrbefehle ein
-Loslassen überholen. Die DMA-Ansteuerung reiht 80-ms-Motorwellen synchron aneinander, mit höchstens
-einem vorbereiteten Nachfolger. Stirbt der Prozess, endet die Ausgabe nach
-spätestens etwa 160 ms. Stale Sensoren, ungültige Position, Hindernisse und Sperrzonen
+Loslassen überholen. Die Standardansteuerung (`motor_output: pwm`) erzeugt
+durchgehendes pigpio-PWM mit 50 % Tastverhältnis. Unveränderte Fahrbefehle starten
+den Takt nicht neu. Ein Skript im GPIO-Dienst stoppt alle vier Ausgänge nach etwa
+300 ms ohne Steuerungsaktualisierung, auch bei Ausfall des Python-Controllers.
+STOPP wartet auf die bestätigte Nullausgabe. Diskrete PWM-Frequenzen werden unter
+Einhaltung der Geschwindigkeitsgrenzen gewählt; die Soll-Odometrie berücksichtigt
+diese Frequenzen. `motor_output: wave` aktiviert die bisherige Wellenansteuerung.
+Stale Sensoren, ungültige Position, Hindernisse und Sperrzonen
 sperren die Ausgabe. Diese Software ersetzt keinen physischen Not-Aus.
 
 ## Prüfungen

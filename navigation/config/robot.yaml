@@ -1,6 +1,7 @@
 # Measured geometry and wheel directions MUST be verified before motion is enabled.
 motion_verified: false
 manual_ready: true
+motor_output: pwm
 manual_max_linear_speed: 0.12
 manual_max_angular_speed: 0.40
 linear_acceleration: 0.04

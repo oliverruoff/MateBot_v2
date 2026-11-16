@@ -38,6 +38,7 @@ from spatial import overlay_indices, zone_collision, laser_to_base, self_return,
 from api import create_app
 from localization import ScanMatcher, angle_delta
 from wave_driver import WaveDriver
+from pwm_driver import PwmDriver
 from goal_geometry import arrival_error
 
 ROOT = Path(__file__).parent
@@ -105,8 +106,11 @@ class Bridge(Node):
             raise RuntimeError('pigpiod nicht erreichbar; kein Simulations-Fallback')
         for p in CFG['step_pins'] + CFG['direction_pins'] + [CFG['enable_pin']]:
             self.pi.set_mode(p, pigpio.OUTPUT)
+        self.pi.write(CFG['enable_pin'],int(CFG['enable_active_low']))
         self.pi.wave_tx_stop();self.pi.wave_clear()
-        self.wave_driver=WaveDriver(self.pi,CFG,pigpio.pulse)
+        self.wave_driver=(PwmDriver(self.pi,CFG,DATA/'pwm-driver.json')
+                          if CFG.get('motor_output')=='pwm'
+                          else WaveDriver(self.pi,CFG,pigpio.pulse))
         self.stop_hardware()
         self.tf = TransformBroadcaster(self)
         self.buffer = Buffer()
@@ -466,7 +470,7 @@ class Bridge(Node):
             else:
                 self.applied_cmd = [0., 0., 0.]
             # IMU supplies heading; commanded steps estimate translation only.
-            # Integrate only the active part of finite wave trains, excluding idle gaps.
+            # Driver integrates actual selected output rates, not requested speed.
             if not CFG.get('floor_test_enabled',False):
                 mx,my,_=self.wave_driver.take_motion(now)
                 self.x+=mx*math.cos(self.heading)-my*math.sin(self.heading)
@@ -484,7 +488,11 @@ class Bridge(Node):
                     if not CFG.get('floor_test_enabled',False):
                         steps_m=CFG['steps_per_revolution']*CFG['microsteps']/(math.pi*CFG['wheel_diameter'])
                         hz=[v*steps_m for v in wheels(*cmd,CFG['wheelbase'],CFG['track_width'])]
-                        factor=min(1.,4800/max(max(abs(h) for h in hz),1.))
+                        manual=self.annotations['mode']=='mapping'
+                        self.wave_driver.limits=(CFG['manual_max_linear_speed'] if manual else CFG['max_linear_speed'],
+                                                 CFG['manual_max_angular_speed'] if manual else CFG['max_angular_speed'])
+                        limit=getattr(self.wave_driver,'max_frequency',4800)
+                        factor=min(1.,limit/max(max(abs(h) for h in hz),1.))
                         self.wave_driver.pump([h*factor for h in hz],[v*factor for v in cmd],now)
                     elif not self.pi.wave_tx_busy():
                         if self.last_wave >= 0:
@@ -704,6 +712,7 @@ class Bridge(Node):
                         manual_blocked=self.readiness('mapping',include_stop=False),
                         manual_warning=getattr(self,'manual_warning',''),
                         motion_diagnostics=dict(waves=self.wave_driver.starts,underruns=self.wave_driver.underruns),
+                        motor_output=CFG.get('motor_output','wave'),
                         localization_status=getattr(self,'localization_status',''),
                         manual_limits=[CFG['manual_max_linear_speed'],CFG['manual_max_angular_speed']],
                         camera_view=dict(yaw=CFG.get('camera_yaw',0.),horizontal_fov=CFG.get('camera_horizontal_fov',53.5)),
@@ -987,6 +996,7 @@ class Bridge(Node):
         self.running=False
         self.stop()
         self.save_event.set()
+        if hasattr(self.wave_driver,'close'):self.wave_driver.close()
         self.pi.stop()
 
 
