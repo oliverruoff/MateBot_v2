@@ -6,6 +6,20 @@ Checkout bleibt erhalten; die laufende Installation liegt unter
 
 **[Oberfläche öffnen](http://matebot.local:8080)** · kein Cloud-Dienst, alle Assets lokal.
 
+## Motoren selbst abstimmen
+
+**[Motor-Testbereich öffnen](http://matebot.local:8080/motors)** oder das Zahnrad
+in der Fahransicht wählen. Zieltakt, Beschleunigung, Pulsanteil,
+Einschaltwartezeit, Anlauftakt und Anlaufphase sind einstellbar.
+Eine Richtung gedrückt halten; Loslassen oder STOPP beendet den Versuch.
+Zusätzlich endet er nach der gewählten Dauer von 0,25 bis 3 Sekunden.
+
+„Entwurf speichern“ bewahrt die Kombination für den nächsten Besuch.
+„Als Fahrprofil übernehmen“ übernimmt Grenzen und Anlauf für den normalen
+Joystick und nach Neustarts. Normale Geschwindigkeitsgrenzen gelten weiter.
+Ohne Übernahme bleibt die bisherige 100-Hz-Begrenzung aktiv.
+Details zu Verhalten und Prüfung: [MOTOR_TUNING.md](MOTOR_TUNING.md).
+
 ## Aktueller Fahrstand
 
 Die Motoren laufen vorläufig im sehr langsamen Testbetrieb: maximal 100 Hz pro

@@ -40,6 +40,7 @@ from localization import ScanMatcher, angle_delta
 from wave_driver import WaveDriver
 from pwm_driver import PwmDriver
 from goal_geometry import arrival_error
+from motor_tuning import MotorProfiles,validate_profile,driver_config,test_command
 
 ROOT = Path(__file__).parent
 DATA = Path('/data')
@@ -56,6 +57,8 @@ class Bridge(Node):
         self.lock = threading.RLock()
         self.save_lock = threading.Lock()
         self.session=Session(DATA)
+        self.motor_profiles=MotorProfiles(DATA/'motor-profiles.json',CFG)
+        self.motor_test=None
         self.lease=ControlLease()
         self.annotations=self.session.get()
         self.zones={tuple(c) for c in self.annotations['zones']}
@@ -108,7 +111,8 @@ class Bridge(Node):
             self.pi.set_mode(p, pigpio.OUTPUT)
         self.pi.write(CFG['enable_pin'],int(CFG['enable_active_low']))
         self.pi.wave_tx_stop();self.pi.wave_clear()
-        self.wave_driver=(PwmDriver(self.pi,CFG,DATA/'pwm-driver.json')
+        motor_cfg=driver_config(CFG,self.motor_profiles.active) if self.motor_profiles.active else CFG
+        self.wave_driver=(PwmDriver(self.pi,motor_cfg,DATA/'pwm-driver.json')
                           if CFG.get('motor_output')=='pwm'
                           else WaveDriver(self.pi,CFG,pigpio.pulse))
         self.stop_hardware()
@@ -268,13 +272,81 @@ class Bridge(Node):
 
     def take_control(self,mode):
         """An explicit drive/goal gesture acquires control, without a release dialog."""
+        if getattr(self,'motor_test',None):self.stop()
         return self.arm(mode,True)
+
+    def motor_tuning_state(self):
+        with self.lock:
+            test=getattr(self,'motor_test',None)
+            return dict(**self.motor_profiles.state(),running=bool(test),
+                        remaining=max(0.,test['until']-time.monotonic()) if test else 0.,
+                        actual_hz=getattr(self.wave_driver,'last_output',([0]*4,[]))[0] if getattr(self.wave_driver,'last_output',None) else [0]*4,
+                        gyro_yaw_deg=math.degrees(self.heading),stop_reason=self.manual_warning or self.reason(),
+                        front_distance=min((x for x,y in self.base_points if x>0 and abs(y)<.23),default=None))
+
+    def motor_profile_save(self,profile,apply=False):
+        profile=validate_profile(profile)
+        with self.lock:
+            self.stop()
+            if not apply:self.motor_profiles.save(profile)
+            else:
+                old_cfg=self.wave_driver.cfg
+                self.wave_driver.close()
+                replacement=None
+                try:
+                    replacement=PwmDriver(self.pi,driver_config(CFG,profile),DATA/'pwm-driver.json')
+                    self.motor_profiles.save(profile,True)
+                except Exception:
+                    if replacement:replacement.close()
+                    self.wave_driver=PwmDriver(self.pi,old_cfg,DATA/'pwm-driver.json')
+                    raise
+                self.wave_driver=replacement
+            return self.motor_tuning_state()
+
+    def motor_test_arm(self):
+        with self.lock:
+            self.stop()
+            if self.annotations['mode']!='mapping':
+                self.session.settings(mode='mapping');self.refresh_annotations()
+            return self.take_control('mapping')
+
+    def motor_test_start(self,profile,direction,duration,token):
+        cmd=test_command(direction,profile,CFG,duration)
+        with self.lock:
+            self.lease.check(token,time.monotonic())
+            self.stop()
+            if self.annotations['mode']!='mapping':
+                self.session.settings(mode='mapping');self.refresh_annotations()
+            reason=self.readiness('mapping',include_stop=False,cmd=cmd)
+            if reason:raise ValueError(reason)
+            control=self.take_control('mapping')
+            original=self.wave_driver
+            try:
+                experiment=PwmDriver(self.pi,driver_config(CFG,profile),DATA/'pwm-test-driver.json')
+            except Exception:
+                self.stop();raise
+            self.normal_motor_driver=original
+            self.wave_driver=experiment
+            self.hardware_stopped=False
+            now=time.monotonic()
+            self.motor_test=dict(until=now+duration,direction=direction)
+            self.command=cmd;self.applied_cmd=cmd;self.cmd_at=now
+            return dict(**control,**self.motor_tuning_state())
+
+    def motor_test_refresh(self,token):
+        with self.lock:
+            self.lease.check(token,time.monotonic(),refresh=True)
+            if not self.motor_test or time.monotonic()>=self.motor_test['until']:
+                self.stop();raise ValueError('Test beendet')
+            self.cmd_at=time.monotonic()
+            return dict(ok=True)
 
     def heartbeat(self,token):
         with self.lock:self.lease.check(token,time.monotonic(),refresh=True)
 
     def manual(self,token,vx,vy,wz,sequence=None):
         with self.lock:
+            if getattr(self,'motor_test',None):raise ValueError('Motortest läuft – zuerst stoppen')
             if self.estop and getattr(self,'stop_reason','Gestoppt')!='Gestoppt':
                 raise ValueError('Fahrt gestoppt: '+self.stop_reason)
             self.lease.check(token,time.monotonic(),refresh=True)
@@ -416,6 +488,12 @@ class Bridge(Node):
             self.burst_pulses=0
             self.burst_exhausted=False
             self.stop_hardware()
+            if getattr(self,'motor_test',None):
+                try:self.wave_driver.close()
+                finally:
+                    self.wave_driver=self.normal_motor_driver
+                    self.motor_test=None
+                    self.hardware_stopped=True
             if self.goal_handle:
                 self.goal_handle.cancel_goal_async()
                 self.goal_handle = None
@@ -448,6 +526,10 @@ class Bridge(Node):
             self.last_tick = now
             if not self.estop and now-self.lease.at>LEASE_TIMEOUT:
                 self.stop('Verbindung zur Steuerung abgelaufen – gestoppt')
+            if getattr(self,'motor_test',None) and now>=self.motor_test['until']:
+                self.stop()
+            if getattr(self,'motor_test',None) and now-self.cmd_at>.5:
+                self.stop('Verbindung zum Motortest abgelaufen – gestoppt')
             if not self.estop:
                 reason=self.reason()
                 if reason=='Hindernis im Fahrweg – gestoppt':
@@ -460,10 +542,14 @@ class Bridge(Node):
             if self.reason() or now-self.cmd_at > 0.50:
                 cmd = [0., 0., 0.]
                 self.applied_cmd = [0., 0., 0.]
+            elif getattr(self,'motor_test',None):self.applied_cmd=list(cmd)
             elif any(abs(v)>0.001 for v in cmd):
                 # Loaded open-loop steppers cannot follow large frequency jumps
                 # between queued waves. Ramp gently rather than skipping steps.
-                limits=[CFG.get('linear_acceleration',.04)*dt]*2+[CFG.get('angular_acceleration',.15)*dt]
+                profile=getattr(getattr(self,'motor_profiles',None),'active',None)
+                accel=(profile['acceleration']/(CFG['steps_per_revolution']*CFG['microsteps']/(math.pi*CFG['wheel_diameter']))) if profile else CFG.get('linear_acceleration',.04)
+                if profile and profile['acceleration']==0:accel=100.
+                limits=[accel*dt]*2+[(accel/((CFG['wheelbase']+CFG['track_width'])/2) if profile else CFG.get('angular_acceleration',.15))*dt]
                 cmd=[old+max(-limit,min(limit,target-old))
                      for old,target,limit in zip(self.applied_cmd,cmd,limits)]
                 self.applied_cmd=list(cmd)
@@ -483,7 +569,7 @@ class Bridge(Node):
                 self.x+=(vx*math.cos(self.heading)-vy*math.sin(self.heading))*active_dt
                 self.y+=(vx*math.sin(self.heading)+vy*math.cos(self.heading))*active_dt
             try:
-                if any(abs(v) > 0.001 for v in cmd):
+                if any(abs(v) > (1e-6 if getattr(self,'motor_test',None) else .001) for v in cmd):
                     self.hardware_stopped=False
                     if not CFG.get('floor_test_enabled',False):
                         steps_m=CFG['steps_per_revolution']*CFG['microsteps']/(math.pi*CFG['wheel_diameter'])
@@ -491,6 +577,7 @@ class Bridge(Node):
                         manual=self.annotations['mode']=='mapping'
                         self.wave_driver.limits=(CFG['manual_max_linear_speed'] if manual else CFG['max_linear_speed'],
                                                  CFG['manual_max_angular_speed'] if manual else CFG['max_angular_speed'])
+                        if getattr(self,'motor_test',None):self.wave_driver.limits=(.5,2.)
                         limit=getattr(self.wave_driver,'max_frequency',4800)
                         factor=min(1.,limit/max(max(abs(h) for h in hz),1.))
                         self.wave_driver.pump([h*factor for h in hz],[v*factor for v in cmd],now)

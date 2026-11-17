@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#12211d"><title>Matebot · Motoren testen</title><link rel="stylesheet" href="/assets/motors.css"></head>
+<body><header><a href="/drive">← Zur Steuerung</a><button id="stop" class="stop">■ STOPP</button></header>
+<main><div class="intro"><span class="eyebrow">MATEBOT · WERKSTATT</span><h1>Motoren abstimmen</h1><p>Eine Einstellung ändern, Richtung gedrückt halten und hören, wie er läuft.</p></div>
+<div id="message" role="status">Verbindung wird aufgebaut …</div>
+<div class="layout"><section class="card settings"><h2>Deine Kombination</h2>
+<div id="sliders"></div><p class="hint">Beschleunigung 0 = sofortiger Taktwechsel. Pulsanteil verändert die HIGH-Zeit des Signals, nicht den am Treiber eingestellten Motorstrom.</p>
+<div class="profileActions"><button id="save">Entwurf speichern</button><button id="apply" class="primary">Als Fahrprofil übernehmen</button></div><p id="active" class="hint"></p>
+</section><section class="card test"><div class="sectionHead"><h2>Kurz testen</h2><span id="live">● verbindet</span></div>
+<label class="preset">Vorlage laden<select id="preset"><option value="draft">Gespeicherter Entwurf</option><option value="crawl">Langsamer Zwischenstand · 100 Hz</option><option value="old">Früher V2-Anlauf · 8.000 Hz</option><option value="medium">Früher V2-Anlauf · 1.000 Hz</option></select></label><div class="camera"><img id="camera" alt="Livebild nach vorne"><span id="cameraState">Kamera verbindet …</span></div>
+<div class="metrics"><div><small>Takt FL · FR · BL · BR</small><strong id="actual">—</strong></div><div><small>Drehänderung</small><strong id="yaw">—</strong></div><div><small>Vorne</small><strong id="front">—</strong></div></div>
+<div id="quickFrequency"></div><label class="duration">Maximale Testdauer <select id="duration"><option value="0.25">0,25 s</option><option value="0.5" selected>0,5 s</option><option value="1">1 s</option><option value="2">2 s</option><option value="3">3 s</option></select></label>
+<div class="pad"><button data-direction="turn_left">↶<small>Links drehen</small></button><button data-direction="forward" class="primary">↑<small>Vorwärts</small></button><button data-direction="turn_right">↷<small>Rechts drehen</small></button><button data-direction="left">←<small>Links versetzen</small></button><span id="remaining">HALTEN</span><button data-direction="right">→<small>Rechts versetzen</small></button><span></span><button data-direction="backward">↓<small>Rückwärts</small></button><span></span></div>
+<p class="hint">Loslassen stoppt sofort. Die Anlaufphase zählt zur Testdauer. Jeder Test endet spätestens nach der gewählten Dauer. LiDAR-, Verbindungs- und Sperrzonen-Stopp bleiben aktiv.</p>
+<details><summary>Letzte Versuche</summary><ol id="history"><li>Noch kein Versuch.</li></ol></details>
+</section></div></main><script src="/assets/motors.js"></script></body></html>

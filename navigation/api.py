@@ -37,6 +37,12 @@ def create_app(robot,web_root=None,camera=None):
     @app.get('/drive')
     def drive():return send_from_directory(root,'index.html')
 
+    @app.get('/motors')
+    def motor_page():return send_from_directory(root,'motors.html')
+
+    @app.get('/api/motor-tuning')
+    def motor_tuning():return jsonify(robot.motor_tuning_state())
+
     @app.get('/api/camera/frame.jpg')
     def camera_frame():
         try:
@@ -89,6 +95,13 @@ def create_app(robot,web_root=None,camera=None):
             if action=='stop':
                 robot.stop()
                 return jsonify(stopped=True)
+            if action=='motor-profile':
+                if type(data.get('apply',False)) is not bool:raise ValueError('Ungültige Profilaktion')
+                return jsonify(robot.motor_profile_save(data.get('profile'),data.get('apply',False)))
+            if action=='motor-test-arm':return jsonify(robot.motor_test_arm())
+            if action=='motor-test-start':
+                return jsonify(robot.motor_test_start(data.get('profile'),data.get('direction'),data.get('duration'),token))
+            if action=='motor-test-refresh':return jsonify(robot.motor_test_refresh(token))
             if action=='release':return jsonify(robot.arm(data.get('mode'),data.get('on_site')))
             if action=='take-control':return jsonify(robot.take_control(data.get('mode')))
             if action=='heartbeat':

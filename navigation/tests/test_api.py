@@ -3,6 +3,7 @@ import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).parents[1]))
 from api import create_app
+from motor_tuning import validate_profile
 
 
 class FakeRobot:
@@ -19,6 +20,13 @@ class FakeRobot:
         if token!='test-lease':raise ValueError('Steuerung abgelaufen')
         self.calls.append(('manual',values))
     def stop(self):self.calls.append(('stop',))
+    def motor_tuning_state(self):return dict(running=False)
+    def motor_test_arm(self):return self.arm('mapping',True)
+    def motor_test_start(self,profile,direction,duration,token):
+        if token!='test-lease':raise ValueError('Steuerung abgelaufen')
+        self.calls.append(('motor-test',direction,duration));return dict(token=token)
+    def motor_profile_save(self,profile,apply):
+        validate_profile(profile);self.calls.append(('profile',apply));return dict(ok=True)
     def goal(self,x,y,token,heading=0.):
         if token!='test-lease':raise ValueError('Steuerung abgelaufen')
         self.calls.append(('goal',x,y,heading));return dict(accepted=True)
@@ -26,6 +34,19 @@ class FakeRobot:
 
 
 class APITests(unittest.TestCase):
+    def test_tuning_page_and_lease_protected_test_route(self):
+        with self.client.get('/motors') as response:self.assertEqual(response.status_code,200)
+        self.assertEqual(self.client.get('/api/motor-tuning').json,dict(running=False))
+        payload=dict(profile={},direction='forward',duration=.5)
+        self.assertEqual(self.client.post('/api/motor-test-start',json=payload).status_code,403)
+        self.assertEqual(self.client.post('/api/motor-test-start',json=payload,headers=self.headers).status_code,409)
+        r=self.client.post('/api/motor-test-start',json=payload,headers={**self.headers,'X-Matebot-Lease':'test-lease'})
+        self.assertEqual(r.status_code,200)
+
+    def test_motor_profile_rejects_invalid_action(self):
+        r=self.client.post('/api/motor-profile',json=dict(profile={},apply='false'),headers=self.headers)
+        self.assertEqual(r.status_code,409)
+        self.assertEqual(self.robot.calls,[])
     def setUp(self):
         self.robot=FakeRobot()
         self.client=create_app(self.robot).test_client()

@@ -37,16 +37,18 @@ def pwm_script(cfg):
     """
     step, direction = cfg['step_pins'], cfg['direction_pins']
     off = int(cfg['enable_active_low']); on = 1-off
-    lines = ['ld v0 -1', 'ld v1 0', 'ld v40 0']
+    duty=int(round(255*cfg.get('motor_duty_percent',50)/100))
+    delay=math.ceil(cfg.get('motor_enable_delay_ms',10)/10)
+    lines = ['ld v0 -1', 'ld v1 0', 'ld v40 0', 'ld v42 0']
     lines += [f'ld v{i} -1' for i in range(20,28)]
-    lines += ['tag 0', 'mils 10', 'inr v1', 'lda v1', 'cmp 30', 'jp 99',
-              'lda p0', 'and 1', 'jnz 0', 'lda p0', 'cmp v0', 'jz 0',
+    lines += ['tag 0', 'mils 10', 'inr v42', 'inr v1', 'lda v1', 'cmp 30', 'jp 99',
+              'lda p0', 'and 1', 'jnz 0', 'lda p0', 'cmp v0', 'jz 21',
               'ld v10 p0']
     lines += [f'ld v{i+11} p{i+1}' for i in range(8)]
     lines += ['lda p0', 'cmp v10', 'jnz 0', 'ld v0 v10', 'ld v1 0',
               'lda v11', 'add v12', 'add v13', 'add v14', 'jz 80',
               'lda v40', 'cmp 0', 'jnz 20', f'w {cfg["enable_pin"]} {on}',
-              'mils 10', 'ld v40 1', 'tag 20']
+              'ld v42 0', 'ld v40 1', 'tag 20', 'lda v42', f'cmp {delay}', 'jm 0']
     for i, (s,d) in enumerate(zip(step,direction)):
         tag = 30+i*5
         f, dc, fc, desired_dir = 11+i, 24+i, 20+i, 15+i
@@ -56,10 +58,11 @@ def pwm_script(cfg):
                   f'lda v{f}', f'cmp v{fc}', f'jz {tag+3}', f'lda v{f}',
                   'cmp 0', f'jz {tag+2}', f'pfs {s} v{f}', f'lda v{fc}',
                   'cmp 0', f'jnz {tag+1}',
-                  f'p {s} 128', f'tag {tag+1}', f'ld v{fc} v{f}',
+                  f'p {s} {duty}', f'tag {tag+1}', f'ld v{fc} v{f}',
                   f'jmp {tag+3}', f'tag {tag+2}', f'p {s} 0',
                   f'ld v{fc} 0', f'tag {tag+3}']
-    lines += ['ld p9 v10', 'jmp 0', 'tag 80']
+    lines += ['ld p9 v10', 'jmp 0', 'tag 21', 'lda v40', 'cmp 0', 'jz 0',
+              'lda p9', 'cmp v0', 'jz 0', 'jmp 20', 'tag 80']
     lines += [f'p {s} 0' for s in step]
     lines += [f'w {cfg["enable_pin"]} {off}', 'ld v40 0']
     lines += [f'ld v{i} 0' for i in range(20,24)]
@@ -80,6 +83,7 @@ class PwmDriver:
         self.pi=pi; self.cfg=cfg; self.path=Path(checkpoint) if checkpoint else None
         self.starts=0; self.underruns=0; self.active=False; self.closed=False
         self.started_at=None; self.startup_signs=None
+        self.ramp_at=None; self.ramp_peak=0.
         self.motion=[0.,0.,0.]; self.velocity=[0.,0.,0.]; self.integrated_at=None
         self.last_publish=0.; self.frames={}; self.sequence=0
         self.base=(secrets.randbelow((1<<18)-1)+1)<<12
@@ -159,6 +163,7 @@ class PwmDriver:
             return hz
         if self.started_at is None or self.startup_signs and any(a*b<0 for a,b in zip(signs,self.startup_signs)):
             self.started_at=now
+            self.ramp_at=None; self.ramp_peak=0.
         self.startup_signs=signs
         if now-self.started_at<self.cfg.get('motor_start_seconds',0.):
             scale=min(1.,self.cfg.get('motor_start_frequency',40)/max(abs(h) for h in hz))
@@ -173,7 +178,16 @@ class PwmDriver:
             raise RuntimeError('PWM-Watchdog hat die Motoren gestoppt')
         if params[9] in self.frames:self.velocity=self.frames[params[9]]
         limits=getattr(self,'limits',(self.cfg['manual_max_linear_speed'],self.cfg['manual_max_angular_speed']))
-        freq,actual=output_rates(self.startup_rates(hz,now),self.cfg,self.frequencies,limits)
+        requested=self.startup_rates(hz,now)
+        rate=self.cfg.get('motor_acceleration_hz_s',0)
+        peak=max(abs(h) for h in requested)
+        if rate and peak:
+            dt=.02 if self.ramp_at is None else max(0.,min(.1,now-self.ramp_at))
+            self.ramp_peak=min(peak,self.ramp_peak+rate*dt)
+            requested=[h*self.ramp_peak/peak for h in requested]
+        else:self.ramp_peak=peak
+        self.ramp_at=now
+        freq,actual=output_rates(requested,self.cfg,self.frequencies,limits)
         dirs=[int(h*s>0) for h,s in zip(hz,self.cfg['direction_signs'])]
         if state not in (2,3):
             self._publish([0]*4,dirs,[0.,0.,0.],now)
@@ -199,6 +213,7 @@ class PwmDriver:
             self._force_off(); self.active=False; self.velocity=[0.,0.,0.]
             self.last_output=None
             self.started_at=None; self.startup_signs=None
+            self.ramp_at=None; self.ramp_peak=0.
 
     def close(self):
         if self.closed:return

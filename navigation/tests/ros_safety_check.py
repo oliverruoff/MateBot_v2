@@ -15,6 +15,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import OccupancyGrid
 from session import Session,ControlLease
+from motor_tuning import MotorProfiles
 
 
 class Output:
@@ -55,6 +56,18 @@ class Harness(bridge.Bridge):
         self.x=self.y=self.heading=0.;self.last_tick=now-.05;self.cmd_at=now;self.last_wave=-1
         self.pi=FakeGPIO();self.wave_driver=bridge.WaveDriver(self.pi,bridge.CFG,bridge.pigpio.pulse);self.tf=Output();self.odom_pub=Output();self.scan_pub=Output();self.map_pub=Output()
         self.map=None;self.map_version=0;self.scan_count=0
+        self.motor_profiles=MotorProfiles(Path(directory)/'motor-profiles.json',bridge.CFG)
+        self.motor_test=None;self.manual_warning=''
+
+
+class FakeTestPWM:
+    def __init__(self,pi,cfg,*_):
+        self.cfg=cfg;self.max_frequency=cfg['motor_max_frequency'];self.records=[]
+        self.starts=0;self.underruns=0;self.last_output=None
+    def stop(self,*_):self.records=[];self.last_output=None
+    def close(self):self.stop()
+    def take_motion(self,*_):return [0.,0.,0.]
+    def pump(self,hz,velocity,now):self.records=[True];self.last_output=([abs(v) for v in hz],[])
 
 
 class ROSMotorInterlockTests(unittest.TestCase):
@@ -71,6 +84,39 @@ class ROSMotorInterlockTests(unittest.TestCase):
         self.clock_patch.stop();self.robot.close();self.robot.destroy_node();self.temp.cleanup()
     def advance(self,seconds=.05):
         self.now[0]+=seconds;self.robot.scan_at=self.robot.imu_at=self.now[0]
+
+    def start_test(self,duration=1):
+        r=self.robot;profile=dict(r.motor_profiles.draft,frequency=1000,warmup=0)
+        token=r.motor_test_arm()['token']
+        return r.motor_test_start(profile,'forward',duration,token)
+
+    def test_delayed_start_after_release_cannot_reactivate_motors(self):
+        r=self.robot;token=r.motor_test_arm()['token'];r.stop()
+        with patch('bridge.PwmDriver',FakeTestPWM):
+            with self.assertRaises(ValueError):r.motor_test_start(r.motor_profiles.draft,'forward',1,token)
+        self.assertTrue(r.estop);self.assertIsNone(r.motor_test)
+
+    def test_test_deadline_is_not_extended_by_live_refresh_and_restores_normal_driver(self):
+        r=self.robot;original=r.wave_driver
+        with patch('bridge.PwmDriver',FakeTestPWM):result=self.start_test(.3)
+        self.advance(.2);r.motor_test_refresh(result['token']);r.tick()
+        self.assertIsNotNone(r.motor_test)
+        with self.assertRaises(ValueError):r.manual(result['token'],.01,0,0,1)
+        self.advance(.11);r.tick()
+        self.assertTrue(r.estop);self.assertIsNone(r.motor_test);self.assertIs(r.wave_driver,original)
+
+    def test_missing_test_refresh_stops_without_waiting_for_long_lease(self):
+        r=self.robot
+        with patch('bridge.PwmDriver',FakeTestPWM):self.start_test(3)
+        self.advance(.51);r.tick()
+        self.assertTrue(r.estop);self.assertIsNone(r.motor_test)
+
+    def test_profile_apply_stops_and_persists_without_starting_outputs(self):
+        r=self.robot;r.wave_driver=FakeTestPWM(r.pi,dict(bridge.CFG,motor_max_frequency=100))
+        profile=dict(r.motor_profiles.draft,frequency=2000)
+        with patch('bridge.PwmDriver',FakeTestPWM):r.motor_profile_save(profile,True)
+        self.assertTrue(r.estop);self.assertFalse(r.wave_driver.records)
+        self.assertEqual(r.motor_profiles.active['frequency'],2000)
     def test_manual_imu_scheduling_delay_does_not_drop_held_command(self):
         r=self.robot;token=r.take_control('mapping')['token']
         r.imu_at=self.now[0]-.47

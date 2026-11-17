@@ -13,8 +13,8 @@ CFG=dict(step_pins=[9,22,13,5],direction_pins=[11,10,19,6],
 
 
 class ScriptMachine:
-    def __init__(self):
-        self.code=[line.split() for line in pwm_script(CFG).splitlines()]
+    def __init__(self,cfg=CFG):
+        self.code=[line.split() for line in pwm_script(cfg).splitlines()]
         self.tags={int(line[1]):i for i,line in enumerate(self.code) if line[0]=='tag'}
         self.p=[0]*10;self.v=[0]*150;self.pc=0;self.a=self.flag=0
         self.ms=0.;self.halted=False;self.pwm={};self.gpio={};self.freq={};self.trace=[]
@@ -37,8 +37,8 @@ class ScriptMachine:
         elif op=='add':self.a+=self.get(args[0]);self.flag=self.a
         elif op=='inr':
             value=self.get(args[0])+1;self.set(args[0],value);self.flag=value
-        elif op in ('jmp','jz','jnz','jp'):
-            if op=='jmp' or op=='jz' and self.flag==0 or op=='jnz' and self.flag!=0 or op=='jp' and self.flag>=0:
+        elif op in ('jmp','jz','jnz','jp','jm'):
+            if op=='jmp' or op=='jz' and self.flag==0 or op=='jnz' and self.flag!=0 or op=='jp' and self.flag>=0 or op=='jm' and self.flag<0:
                 self.pc=self.tags[int(args[0])]
         elif op in ('mils','mics'):self.ms+=self.get(args[0])/(1000 if op=='mics' else 1)
         elif op in ('p','w','pfs'):
@@ -59,6 +59,20 @@ class ScriptMachine:
 
 
 class PwmScriptTests(unittest.TestCase):
+    def test_stop_and_watchdog_remain_live_during_enable_wait(self):
+        m=ScriptMachine(dict(CFG,motor_enable_delay_ms=400));m.frame(2);m.run(100)
+        self.assertFalse(any(m.pwm.values()))
+        m.frame(4,[0]*4);m.run(30)
+        self.assertEqual(m.gpio[26],1)
+        self.assertFalse(any(m.pwm.values()))
+        m=ScriptMachine(dict(CFG,motor_enable_delay_ms=400));m.frame(2);m.run(350)
+        self.assertTrue(m.halted);self.assertFalse(any(m.pwm.values()))
+
+    def test_custom_duty_is_applied_after_enable_wait(self):
+        m=ScriptMachine(dict(CFG,motor_enable_delay_ms=50,motor_duty_percent=20))
+        m.frame(2);m.run(40);self.assertFalse(any(m.pwm.values()))
+        m.run(40);self.assertEqual([m.pwm[p] for p in CFG['step_pins']],[51]*4)
+
     def test_startup_refreshes_do_not_restart_warmup_and_reversal_does(self):
         driver=PwmDriver.__new__(PwmDriver)
         driver.cfg=dict(motor_start_seconds=1.,motor_start_frequency=40)
