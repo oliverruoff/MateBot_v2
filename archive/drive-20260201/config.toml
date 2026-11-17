@@ -1,0 +1,24 @@
+[robot]
+# Delay zwischen Schritten in Sekunden. 
+# 0.005 ist langsam/sicher. Kleiner = schneller.
+speed_delay = 0.005 
+
+[motors]
+# Shared Sleep Pin
+sleep_pin = 26
+
+[motors.fl] # Front Left
+dir = 11
+step = 9
+
+[motors.fr] # Front Right
+dir = 10
+step = 22
+
+[motors.bl] # Back Left
+dir = 19
+step = 13
+
+[motors.br] # Back Right
+dir = 6
+step = 5
