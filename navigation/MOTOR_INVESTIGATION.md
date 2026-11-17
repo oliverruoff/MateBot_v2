@@ -1,5 +1,34 @@
 # Structured motor investigation
 
+## Latest owner-observed raised-wheel evidence
+
+With the recovered February 1 driver, the owner confirmed all four wheels run
+smoothly and quietly individually at the same 8000 Hz target / historical ramp.
+Combined operation still failed. Reversing output order did not move the failure
+away from BR. Synchronous and quarter-phase DMA comparisons did not repair it.
+
+FL/FR/BL worked together with BR STEP (GPIO5) held LOW. When BR was added via an
+independent finite waveform, the owner saw THREE -> ONLY BR -> THREE, despite
+four simultaneous GPIO clocks. A subsequent constant-level comparison ran only
+FL/FR/BL continuously: GPIO5 LOW for 2 s, HIGH for 2 s, LOW for 2 s. The owner
+reported quiet/smooth -> loud/rough -> quiet/smooth, with BR not rotating.
+
+An independent read-only CPU register sampler checked the three STEP outputs in
+steady one-second windows of the same LOW/HIGH/LOW sequence. For every pin and
+every stage, the median period was 125 us, median HIGH width 60 us, HIGH-width
+5th/95th percentiles both 60 us; 7985 periods were counted in each window.
+GPIO5 was read HIGH throughout the middle checks. This is strong digital
+evidence against the proposed last-loop overwrite or changed duty on the other
+three outputs. It does not measure voltage/current at a driver input.
+
+No wiring diagnosis is established yet. Actual GPIO5 connections, common signal
+returns, enables, logic supply and receiver voltages must be checked. A single
+STEP edge may also wake full winding current, so the constant-level experiment
+does not by itself exclude a motor-supply problem. Physical terminal tracing
+and receiver/supply measurements are now required; more arbitrary frequency
+changes are not supported by the evidence. No permanent drive-profile changes
+were made during these owner-observed bench comparisons.
+
 ## Acceptance condition
 
 Four wheels must visibly rotate consistently in the intended directions, first
