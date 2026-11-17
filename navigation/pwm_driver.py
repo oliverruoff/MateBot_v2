@@ -49,7 +49,10 @@ def pwm_script(cfg):
               'lda v11', 'add v12', 'add v13', 'add v14', 'jz 80',
               'lda v40', 'cmp 0', 'jnz 20', f'w {cfg["enable_pin"]} {on}',
               'ld v42 0', 'ld v40 1', 'tag 20', 'lda v42', f'cmp {delay}', 'jm 0']
-    for i, (s,d) in enumerate(zip(step,direction)):
+    order=cfg.get('motor_channel_order',[0,1,2,3])
+    if sorted(order)!=[0,1,2,3]:raise ValueError('Ungültige Kanalreihenfolge')
+    for i in order:
+        s,d=step[i],direction[i]
         tag = 30+i*5
         f, dc, fc, desired_dir = 11+i, 24+i, 20+i, 15+i
         lines += [f'lda v{desired_dir}', f'cmp v{dc}', f'jz {tag}',

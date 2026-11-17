@@ -40,7 +40,7 @@ from localization import ScanMatcher, angle_delta
 from wave_driver import WaveDriver
 from pwm_driver import PwmDriver
 from goal_geometry import arrival_error
-from motor_tuning import MotorProfiles,validate_profile,driver_config,test_command
+from motor_tuning import MotorProfiles,validate_profile,driver_config,test_command,test_rates,WHEELS
 
 ROOT = Path(__file__).parent
 DATA = Path('/data')
@@ -278,10 +278,21 @@ class Bridge(Node):
     def motor_tuning_state(self):
         with self.lock:
             test=getattr(self,'motor_test',None)
+            pins=[]
+            if hasattr(self.pi,'get_mode'):
+                for i,label in enumerate(WHEELS):
+                    pin=CFG['step_pins'][i]
+                    try:
+                        try:duty=self.pi.get_PWM_dutycycle(pin)
+                        except pigpio.error:duty=0
+                        pins.append(dict(wheel=label,step=pin,direction=CFG['direction_pins'][i],
+                                         mode=self.pi.get_mode(pin),frequency=self.pi.get_PWM_frequency(pin) if duty else 0,
+                                         duty=duty))
+                    except (OSError,pigpio.error):pins.append(dict(wheel=label,error='Ausgang nicht lesbar'))
             return dict(**self.motor_profiles.state(),running=bool(test),
                         remaining=max(0.,test['until']-time.monotonic()) if test else 0.,
                         actual_hz=getattr(self.wave_driver,'last_output',([0]*4,[]))[0] if getattr(self.wave_driver,'last_output',None) else [0]*4,
-                        gyro_yaw_deg=math.degrees(self.heading),stop_reason=self.manual_warning or self.reason(),
+                        gyro_yaw_deg=math.degrees(self.heading),stop_reason=self.manual_warning or self.reason(),pins=pins,
                         front_distance=min((x for x,y in self.base_points if x>0 and abs(y)<.23),default=None))
 
     def motor_profile_save(self,profile,apply=False):
@@ -310,8 +321,10 @@ class Bridge(Node):
                 self.session.settings(mode='mapping');self.refresh_annotations()
             return self.take_control('mapping')
 
-    def motor_test_start(self,profile,direction,duration,token):
-        cmd=test_command(direction,profile,CFG,duration)
+    def motor_test_start(self,profile,direction,duration,token,wheel='all',reverse=False):
+        cmd=test_command(direction,profile,CFG,duration,wheel)
+        rates=test_rates(direction,profile,wheel)
+        if type(reverse) is not bool:raise ValueError('Ungültige Reihenfolge')
         with self.lock:
             self.lease.check(token,time.monotonic())
             self.stop()
@@ -322,14 +335,16 @@ class Bridge(Node):
             control=self.take_control('mapping')
             original=self.wave_driver
             try:
-                experiment=PwmDriver(self.pi,driver_config(CFG,profile),DATA/'pwm-test-driver.json')
+                cfg=driver_config(CFG,profile)
+                cfg['motor_channel_order']=[3,2,1,0] if reverse else [0,1,2,3]
+                experiment=PwmDriver(self.pi,cfg,DATA/'pwm-test-driver.json')
             except Exception:
                 self.stop();raise
             self.normal_motor_driver=original
             self.wave_driver=experiment
             self.hardware_stopped=False
             now=time.monotonic()
-            self.motor_test=dict(until=now+duration,direction=direction)
+            self.motor_test=dict(until=now+duration,direction=direction,hz=rates,wheel=wheel)
             self.command=cmd;self.applied_cmd=cmd;self.cmd_at=now
             return dict(**control,**self.motor_tuning_state())
 
@@ -574,6 +589,7 @@ class Bridge(Node):
                     if not CFG.get('floor_test_enabled',False):
                         steps_m=CFG['steps_per_revolution']*CFG['microsteps']/(math.pi*CFG['wheel_diameter'])
                         hz=[v*steps_m for v in wheels(*cmd,CFG['wheelbase'],CFG['track_width'])]
+                        if getattr(self,'motor_test',None):hz=self.motor_test['hz']
                         manual=self.annotations['mode']=='mapping'
                         self.wave_driver.limits=(CFG['manual_max_linear_speed'] if manual else CFG['max_linear_speed'],
                                                  CFG['manual_max_angular_speed'] if manual else CFG['max_angular_speed'])

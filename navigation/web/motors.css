@@ -3,3 +3,5 @@
 @media(max-width:760px){.metrics{grid-template-columns:1fr 1fr}.metrics>div:first-child{grid-column:1/-1}}
 
 .camera img:not([src]){visibility:hidden}
+
+.channelControls{display:grid;gap:8px;margin:0 0 17px;font-size:13px}.channelControls label:first-child{display:grid;gap:6px}.channelControls select{width:100%}.channelControls small{color:#718068;font-size:11px}.orderControl{display:flex;gap:8px;align-items:center}.orderControl input{accent-color:#476b3e}.pinDetails{margin:8px 0 0}.pinRow{padding:6px 0;border-bottom:1px solid #e1e7dc;font-size:11px}

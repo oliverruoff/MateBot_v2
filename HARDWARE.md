@@ -5,13 +5,15 @@
 The active software is documented in `navigation/README.md`; configuration is
 `navigation/config/robot.yaml`. Owner-measured outside dimensions: **41 cm long,
 30 cm wide**, **31 cm wheelbase**, **21 cm track width**. The LD19 is centered,
-**14 cm above ground**. A stationary front-obstacle comparison established
-`lidar_yaw = -pi/2`; the cable exit alone did not establish the forward direction.
+**14 cm above ground**. Current camera/gyro comparisons use native LiDAR angle
+sign +1 and `lidar_yaw = +pi/2`; the earlier negative-yaw convention mirrored
+left/right. The cable exit alone did not establish the forward direction.
 
-Raised-wheel tests confirmed forward-drive polarity with **FL/FR/BL/BR direction
-multipliers `[-1, 1, -1, 1]`**. The current controller uses finite simultaneous
-pigpio waves, not indefinite PWM. Floor-distance, lateral, yaw and stopping tests
-remain to be performed before point-to-click driving is enabled. Motor/wheel and
+Earlier raised-wheel observations led to **FL/FR/BL/BR direction multipliers
+`[-1, 1, -1, 1]`**. The current controller uses continuous hardware-timed pigpio
+PWM with a watchdog. Owner observation now reports only BR rotating reliably;
+body displacement does not prove all four motors are working. Normal-speed
+four-wheel driving and arrival remain unverified. Motor/wheel and
 microstep values below are nominal values from the prior documentation, not a new
 measurement of floor travel. No wheel encoders or cliff sensors are confirmed.
 
@@ -27,12 +29,12 @@ This document details the hardware components, wiring configuration, and specifi
 * **Wheels:** **4-Wheel Mecanum (Omni Wheels)**
 * **Wheel Diameter:** **79mm**
 * **Kinematics:** Allows for X-translation (forward/back), Y-translation (strafing), and Rotation (yaw) simultaneously.
-* **Motors:** 4x Stepper Motors (**NEMA 23**, 1.8° per full step)
-* **Drivers:** 4x **TB6600 Stepper Drivers**
-* **Microstepping:** Configured to **1/32** for high precision / smooth motion.
-* **Driver Configuration (DIP Switches):**
+* **Motors:** Documented as 4x **NEMA 23**, nominal 1.8° per full step. NEMA size does not identify winding current or inductance; exact nameplate model remains unknown.
+* **Drivers:** Documented as **TB6600 modules**; exact manufacturer/version and input circuitry are not confirmed.
+* **Microstepping:** Software assumes **1/32**; this is not an independently verified motor-angle measurement.
+* **Historical, model-dependent DIP assumptions:**
     * **Microstep (S1, S2, S3):** `OFF, OFF, OFF` (1/32 Step)
-    * **Current (S4, S5, S6):** `OFF, OFF, ON` (~3.5A Peak / 3.3A RMS)
+    * **Current (S4, S5, S6):** Reported `OFF, OFF, ON`. The previous 3.5 A claim was unsupported. DFRobot's V1.2 table assigns this combination 2.8 A; use the actual module's table, not that example, to establish current.
 
 ### Motor Pinout (BCM Numbering)
 | Motor | Pin Function | BCM Pin | Physical Pin |
@@ -54,13 +56,30 @@ This document details the hardware components, wiring configuration, and specifi
 Getting the stepper motors to run reliably on a Raspberry Pi required a specific hardware-software orchestration. 
 
 ### The Correct Way to Drive the Motors:
-1.  **Hardware PWM is Mandatory:** Using software-timed loops for high-frequency stepping (e.g., 1/32 microstepping requires double the frequency of 1/16) leads to jitter and stalled motors.
+1.  **Use a timed STEP clock:** DMA-timed PWM and correctly timed finite pulse trains are both valid STEP/DIR approaches. Python sleep loops are not a reliable high-rate clock. A different pulse-generation API alone is not evidence of a physical fix.
 2.  **The `pigpio` Strategy:** * We use the `pigpio` daemon to handle hardware-timed pulses.
     * **Frequency Control:** Instead of manual bit-banging, we use `pi.set_PWM_frequency(step_pin, frequency_hz)`.
     * **Duty Cycle:** Set to `128` (50%) to generate the clock signal.
 3.  **The Enable Pin:** All drivers share BCM 26 connected to `ENA`.
     * *Note for TB6600:* Check logic level. Often leaving ENA disconnected is "Enabled". If wired, ensure correct HIGH/LOW logic (usually Active Low for enabling on some clones, Active High on others).
 4.  **Direction Calibration:** Every motor's orientation may vary. Use the `direction_multiplier: 1` or `-1` in `config.yaml` to calibrate forward/backward without rewiring.
+
+### Electrical requirements still to verify
+
+Pi 4 GPIO electrical capabilities differ from older Pi models: the official
+BCM2711 table specifies 4 mA default / 8 mA maximum drive-strength settings.
+The pigpio value named 16 mA must not be treated as a confirmed 16 mA Pi 4
+source-current capability. Readback clocks do not measure voltage or current at
+an optocoupler. See the [official GPIO documentation](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html).
+
+For comparison, the [DFRobot module manual](https://dfimg.dfrobot.com/nobody/wiki/0bcc0b661ce7750ff7d0134bfc3e88b3.pdf)
+calls for 8–15 mA optocoupler input drive and describes 5 V signal wiring. Other
+modules sold under TB6600 have different input specifications. This makes a
+direct-GPIO interface worth checking; it does not prove that this robot needs a
+specific replacement or wiring change. Do not connect 5 V directly to Pi GPIO.
+
+Research, channel-isolation controls and the verification matrix are documented
+in [navigation/MOTOR_INVESTIGATION.md](navigation/MOTOR_INVESTIGATION.md).
 
 ---
 

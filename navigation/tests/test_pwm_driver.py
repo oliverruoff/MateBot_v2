@@ -59,6 +59,17 @@ class ScriptMachine:
 
 
 class PwmScriptTests(unittest.TestCase):
+    def test_reversed_emission_order_preserves_all_four_distinct_channels(self):
+        for order in [[0,1,2,3],[3,2,1,0]]:
+            m=ScriptMachine(dict(CFG,motor_channel_order=order))
+            rates=[100,200,400,800];dirs=[0,1,1,0]
+            m.frame(2,rates,dirs);m.run(60)
+            self.assertEqual([m.freq[p] for p in CFG['step_pins']],rates)
+            self.assertEqual([m.gpio[p] for p in CFG['direction_pins']],dirs)
+            self.assertEqual([m.pwm[p] for p in CFG['step_pins']],[128]*4)
+            self.assertEqual([pin for op,pin,value in m.trace if op=='pfs'],[CFG['step_pins'][i] for i in order])
+        with self.assertRaises(ValueError):pwm_script(dict(CFG,motor_channel_order=[3,3,1,0]))
+
     def test_stop_and_watchdog_remain_live_during_enable_wait(self):
         m=ScriptMachine(dict(CFG,motor_enable_delay_ms=400));m.frame(2);m.run(100)
         self.assertFalse(any(m.pwm.values()))

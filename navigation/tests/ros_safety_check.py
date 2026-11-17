@@ -85,10 +85,20 @@ class ROSMotorInterlockTests(unittest.TestCase):
     def advance(self,seconds=.05):
         self.now[0]+=seconds;self.robot.scan_at=self.robot.imu_at=self.now[0]
 
-    def start_test(self,duration=1):
+    def start_test(self,duration=1,wheel='all',reverse=False):
         r=self.robot;profile=dict(r.motor_profiles.draft,frequency=1000,warmup=0)
         token=r.motor_test_arm()['token']
-        return r.motor_test_start(profile,'forward',duration,token)
+        return r.motor_test_start(profile,'forward',duration,token,wheel,reverse)
+
+    def test_single_wheel_keeps_other_three_step_outputs_zero(self):
+        r=self.robot
+        for i,wheel in enumerate(['FL','FR','BL','BR']):
+            with patch('bridge.PwmDriver',FakeTestPWM):self.start_test(1,wheel,True)
+            self.advance(.05);r.tick()
+            expected=[0.]*4;expected[i]=1000.
+            self.assertEqual(r.wave_driver.last_output[0],expected)
+            self.assertEqual(r.wave_driver.cfg['motor_channel_order'],[3,2,1,0])
+            r.stop()
 
     def test_delayed_start_after_release_cannot_reactivate_motors(self):
         r=self.robot;token=r.motor_test_arm()['token'];r.stop()

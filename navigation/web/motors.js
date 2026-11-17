@@ -19,7 +19,7 @@ async function post(action,body={},lease=token){
  const data=await r.json();if(!r.ok)throw Error(data.error||'Aktion fehlgeschlagen');return data;
 }
 function lock(value){
- document.querySelectorAll('#sliders input,#quickFrequency input,#preset,#save,#apply,#duration').forEach(el=>el.disabled=value);
+ document.querySelectorAll('#sliders input,#quickFrequency input,#preset,#save,#apply,#duration,#testWheel,#testReverse').forEach(el=>el.disabled=value);
 }
 function values(){
  const p={};fields.forEach(([key])=>p[key]=Number($(`#n-${key}`).value));
@@ -52,7 +52,7 @@ async function stop(note){
   lastDelta=(lastYaw-baseline+540)%360-180;
   $('#yaw').textContent=lastDelta.toFixed(1)+'°';
   const list=$('#history');if(!list.dataset.used){list.replaceChildren();list.dataset.used='1'}
-  const li=document.createElement('li');li.textContent=`${trial.label} · ${format(trial.p.frequency)} Hz · ${format(trial.p.duty)} % · Rampe ${format(trial.p.acceleration)} Hz/s · ${lastDelta.toFixed(1)}° Drehänderung`;
+  const li=document.createElement('li');li.textContent=`${trial.label} · ${trial.wheel} · ${trial.reverse?'umgekehrt':'normale Reihenfolge'} · ${format(trial.p.frequency)} Hz · ${format(trial.p.duty)} % · Rampe ${format(trial.p.acceleration)} Hz/s · ${lastDelta.toFixed(1)}° Drehänderung`;
   list.prepend(li);while(list.children.length>8)list.lastElementChild.remove();
  }
  stopping=false;
@@ -66,9 +66,10 @@ async function begin(button){
   const control=await post('motor-test-arm',{},null);
   if(!held||epoch!==generation){await post('stop',{},null);return}
   token=control.token;
-  const result=await post('motor-test-start',{profile:p,direction:button.dataset.direction,duration});
+  const wheel=$('#testWheel').value,reverse=$('#testReverse').checked;
+  const result=await post('motor-test-start',{profile:p,direction:button.dataset.direction,duration,wheel,reverse});
   if(!held||epoch!==generation){await post('stop',{},null);return}
-  token=result.token;currentTrial={p,label:button.textContent.trim(),started:performance.now()};
+  token=result.token;currentTrial={p,label:button.textContent.trim(),started:performance.now(),wheel,reverse};
   message(`Test läuft · höchstens ${format(duration,2)} s. Loslassen stoppt.`);
   timer=setInterval(async()=>{
    if(busy||!held)return;busy=true;
@@ -86,6 +87,12 @@ for(const button of document.querySelectorAll('[data-direction]')){
  button.addEventListener('keyup',e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();if(held)stop('Losgelassen · gestoppt')}});
 }
 $('#stop').onclick=()=>stop('Gestoppt');
+function channelView(){
+ const single=$('#testWheel').value!=='all';
+ document.querySelectorAll('[data-direction]').forEach(b=>b.disabled=!ready||(single&&!['forward','backward'].includes(b.dataset.direction)));
+ $('#channelHint').textContent=single?'Einzelradprüfung: Vorwärts/Rückwärts wirkt nur auf das gewählte Rad. Der Roboter kann sich dabei drehen.':$('#testReverse').checked?'Reihenfolge: hinten rechts → hinten links → vorne rechts → vorne links.':'Reihenfolge normal: vorne links → vorne rechts → hinten links → hinten rechts.';
+}
+$('#testWheel').onchange=channelView;$('#testReverse').onchange=channelView;
 $('#preset').onchange=()=>{
  const key=$('#preset').value;
  if(key==='draft'&&savedState)fill(savedState.draft);
@@ -107,6 +114,10 @@ function render(s,pollStarted=Infinity){
  $('#remaining').textContent=s.running?format(s.remaining,1)+' s':'HALTEN';
  $('#active').textContent=s.active?`Fahrprofil: maximal ${format(s.active.frequency)} Hz · ${format(s.active.duty)} % Pulsanteil. Bleibt nach Neustart erhalten.`:'Fahrprofil: bisherige Einstellungen. Entwürfe ändern den normalen Joystick erst nach „Übernehmen“. ';
  $('#live').textContent=s.running?'● TEST LÄUFT':'● verbunden';
+ if(s.pins){
+  const container=$('#pinStates');container.replaceChildren();
+  for(const pin of s.pins){const row=document.createElement('div');row.className='pinRow';row.textContent=pin.error?`${pin.wheel}: ${pin.error}`:`${pin.wheel} · STEP ${pin.step} / DIR ${pin.direction} · ${format(pin.frequency)} Hz · PWM ${pin.duty}/255 · ${pin.mode===1?'Ausgang':'Modus '+pin.mode}`;container.append(row);}
+ }
  if(held&&token&&!s.running&&currentTrial&&pollStarted>currentTrial.started)stop(s.stop_reason==='Gestoppt'?'Test beendet · gestoppt':s.stop_reason||'Test beendet');
  if(held&&currentTrial&&s.running&&s.stop_reason&&pollStarted>currentTrial.started)stop(s.stop_reason);
 }
@@ -115,7 +126,7 @@ async function poll(){
  if(polling)return;polling=true;const pollStarted=performance.now();
  try{
   const r=await fetch('/api/motor-tuning',{signal:AbortSignal.timeout(2000)});if(!r.ok)throw Error('Roboter nicht bereit');const s=await r.json();
-  if(!ready){savedState=s;fill(s.draft);ready=true;document.querySelectorAll('[data-direction]').forEach(b=>b.disabled=false);message('Bereit. Werte wählen und eine Richtung gedrückt halten.');}
+  if(!ready){savedState=s;fill(s.draft);ready=true;channelView();message('Bereit. Werte wählen und eine Richtung gedrückt halten.');}
   render(s,pollStarted);
  }catch(e){$('#live').textContent='● offline';if(held)await stop('Verbindung unterbrochen · gestoppt');else message('Keine Verbindung zum Roboter.',true)}finally{polling=false}
 }

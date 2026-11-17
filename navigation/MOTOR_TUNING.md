@@ -1,5 +1,20 @@
 # User-adjustable motor experiments
 
+## Channel isolation added after the BR-only report
+
+Tests can select all wheels or one physical pin pair (FL/FR/BL/BR). Single-wheel
+mode enables forward/backward only and keeps the other three STEP outputs zero.
+The optional reversed emission order changes the order of GPIO updates, not the
+wheel assignments, and is not applied to normal driving profiles. Read-only
+per-pin daemon settings are visible under output settings. These do not measure
+receiver voltage/current or prove wheel rotation. Research and the verification
+matrix are in [MOTOR_INVESTIGATION.md](MOTOR_INVESTIGATION.md).
+
+Updated checks: 54 Python tests, 4 JavaScript tests, 20 isolated ROS checks.
+Browser request-interception tests include selecting one wheel, disabling
+inapplicable directions, and forwarding the reversed-order choice. No additional
+autonomous physical motion test was run for these additions.
+
 The mobile and desktop `/motors` page provides paired numeric/range inputs for
 target frequency, acceleration, duty cycle, enable delay, startup frequency and
 startup duration. It includes old-V2 ramp presets, live camera, actual selected

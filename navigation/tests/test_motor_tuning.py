@@ -5,13 +5,22 @@ import sys
 import tempfile
 import unittest
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from motor_tuning import MotorProfiles,validate_profile,test_command,driver_config
+from motor_tuning import MotorProfiles,validate_profile,test_command,test_rates,driver_config
 
 CFG=dict(steps_per_revolution=200,microsteps=32,wheel_diameter=.079,wheelbase=.31,track_width=.21,motor_max_frequency=100)
 PROFILE=dict(frequency=1000,acceleration=20000,duty=50,start_frequency=40,warmup=0,enable_delay=100)
 
 
 class MotorTuningTests(unittest.TestCase):
+    def test_single_wheel_mask_does_not_project_into_other_outputs(self):
+        for i,wheel in enumerate(['FL','FR','BL','BR']):
+            for direction,sign in [('forward',1),('backward',-1)]:
+                expected=[0.]*4;expected[i]=sign*PROFILE['frequency']
+                self.assertEqual(test_rates(direction,PROFILE,wheel),expected)
+                self.assertTrue(any(test_command(direction,PROFILE,CFG,1,wheel)))
+        with self.assertRaises(ValueError):test_rates('forward',PROFILE,'unknown')
+        with self.assertRaises(ValueError):test_rates('turn_left',PROFILE,'BR')
+
     def test_rejects_invalid_values_before_gpio_configuration(self):
         for key,value in [('frequency',float('nan')),('frequency',8001),('duty',0),('acceleration',True),('enable_delay',501),('warmup',-1),('start_frequency',2000)]:
             p=dict(PROFILE);p[key]=value

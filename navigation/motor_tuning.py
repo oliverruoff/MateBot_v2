@@ -8,6 +8,7 @@ BOUNDS=dict(frequency=(10,8000),acceleration=(0,100000),duty=(5,95),
 DIRECTIONS=dict(forward=[1,1,1,1],backward=[-1,-1,-1,-1],
                 left=[-1,1,1,-1],right=[1,-1,-1,1],
                 turn_left=[-1,1,-1,1],turn_right=[1,-1,1,-1])
+WHEELS=('FL','FR','BL','BR')
 
 
 def validate_profile(value):
@@ -31,13 +32,22 @@ def driver_config(cfg,profile):
                 motor_acceleration_hz_s=p['acceleration'],motor_enable_delay_ms=p['enable_delay'])
 
 
-def test_command(direction,profile,cfg,duration):
+def test_rates(direction,profile,wheel='all'):
     p=validate_profile(profile)
     if direction not in DIRECTIONS:raise ValueError('Unbekannte Testrichtung')
+    if wheel!='all' and wheel not in WHEELS:raise ValueError('Unbekanntes Testrad')
+    if wheel!='all' and direction not in ('forward','backward'):
+        raise ValueError('Einzelradprüfung: Vorwärts oder Rückwärts wählen')
+    return [s*p['frequency'] if wheel=='all' or wheel==WHEELS[i] else 0.
+            for i,s in enumerate(DIRECTIONS[direction])]
+
+
+def test_command(direction,profile,cfg,duration,wheel='all'):
+    hz=test_rates(direction,profile,wheel)
     if isinstance(duration,bool) or not isinstance(duration,(int,float)) or not math.isfinite(duration) or not .1<=duration<=3:
         raise ValueError('Testdauer: 0,1 bis 3 Sekunden')
     steps_m=cfg['steps_per_revolution']*cfg['microsteps']/(math.pi*cfg['wheel_diameter'])
-    return list(twist([s*p['frequency']/steps_m for s in DIRECTIONS[direction]],cfg['wheelbase'],cfg['track_width']))
+    return list(twist([h/steps_m for h in hz],cfg['wheelbase'],cfg['track_width']))
 
 
 class MotorProfiles:

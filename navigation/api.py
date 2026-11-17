@@ -100,7 +100,7 @@ def create_app(robot,web_root=None,camera=None):
                 return jsonify(robot.motor_profile_save(data.get('profile'),data.get('apply',False)))
             if action=='motor-test-arm':return jsonify(robot.motor_test_arm())
             if action=='motor-test-start':
-                return jsonify(robot.motor_test_start(data.get('profile'),data.get('direction'),data.get('duration'),token))
+                return jsonify(robot.motor_test_start(data.get('profile'),data.get('direction'),data.get('duration'),token,data.get('wheel','all'),data.get('reverse',False)))
             if action=='motor-test-refresh':return jsonify(robot.motor_test_refresh(token))
             if action=='release':return jsonify(robot.arm(data.get('mode'),data.get('on_site')))
             if action=='take-control':return jsonify(robot.take_control(data.get('mode')))

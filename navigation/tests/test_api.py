@@ -22,7 +22,7 @@ class FakeRobot:
     def stop(self):self.calls.append(('stop',))
     def motor_tuning_state(self):return dict(running=False)
     def motor_test_arm(self):return self.arm('mapping',True)
-    def motor_test_start(self,profile,direction,duration,token):
+    def motor_test_start(self,profile,direction,duration,token,wheel='all',reverse=False):
         if token!='test-lease':raise ValueError('Steuerung abgelaufen')
         self.calls.append(('motor-test',direction,duration));return dict(token=token)
     def motor_profile_save(self,profile,apply):
