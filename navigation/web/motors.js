@@ -8,7 +8,7 @@ const fields=[
  ['start_frequency','Anlauftakt',10,8000,10,'Hz','Takt während der Anlaufphase, höchstens der Zieltakt.'],
  ['warmup','Anlaufphase',0,2,.1,'s','0 = keine zusätzliche Anlaufphase.']
 ];
-let profile=null,token=null,held=false,generation=0,timer=null,busy=false,ready=false,baseline=0,lastYaw=0,currentTrial=null;
+let profile=null,token=null,held=false,generation=0,timer=null,busy=false,ready=false,baseline=0,lastYaw=0,lastDelta=0,currentTrial=null,stopping=false;
 let savedState=null;
 const format=(v,d=0)=>Number(v).toLocaleString('de-DE',{maximumFractionDigits:d});
 function message(text,error=false){$('#message').textContent=text;$('#message').classList.toggle('error',error)}
@@ -42,19 +42,23 @@ for(const [key,label,min,max,step,unit,hint] of fields){
  });
 }
 async function stop(note){
- held=false;generation++;clearInterval(timer);timer=null;
+ held=false;generation++;stopping=true;clearInterval(timer);timer=null;
  document.querySelectorAll('.pressed').forEach(b=>b.classList.remove('pressed'));lock(false);
  const trial=currentTrial;currentTrial=null;
  try{await post('stop',{},null);if(note)message(note)}catch(e){message('Stopp nicht bestätigt: '+e.message,true)}
  token=null;
  if(trial){
+  try{const r=await fetch('/api/motor-tuning',{signal:AbortSignal.timeout(1000)});if(r.ok)lastYaw=(await r.json()).gyro_yaw_deg||0}catch{}
+  lastDelta=(lastYaw-baseline+540)%360-180;
+  $('#yaw').textContent=lastDelta.toFixed(1)+'°';
   const list=$('#history');if(!list.dataset.used){list.replaceChildren();list.dataset.used='1'}
-  const li=document.createElement('li');li.textContent=`${trial.label} · ${format(trial.p.frequency)} Hz · ${format(trial.p.duty)} % · Rampe ${format(trial.p.acceleration)} Hz/s · ${(lastYaw-baseline).toFixed(1)}° Drehänderung`;
+  const li=document.createElement('li');li.textContent=`${trial.label} · ${format(trial.p.frequency)} Hz · ${format(trial.p.duty)} % · Rampe ${format(trial.p.acceleration)} Hz/s · ${lastDelta.toFixed(1)}° Drehänderung`;
   list.prepend(li);while(list.children.length>8)list.lastElementChild.remove();
  }
+ stopping=false;
 }
 async function begin(button){
- if(!ready||held)return;
+ if(!ready||held||stopping)return;
  let p;try{p=values();for(const [key,,low,high] of fields)if(!Number.isFinite(p[key])||p[key]<low||p[key]>high)throw Error('Bitte gültige Werte eintragen.')}catch(e){message(e.message,true);return}
  held=true;const epoch=++generation;lock(true);button.classList.add('pressed');baseline=lastYaw;
  const duration=Number($('#duration').value);message('Test wird vorbereitet …');
@@ -98,7 +102,7 @@ for(const [id,apply] of [['save',false],['apply',true]])$('#'+id).onclick=async(
 function render(s,pollStarted=Infinity){
  lastYaw=s.gyro_yaw_deg||0;
  $('#actual').textContent=(s.actual_hz||[0,0,0,0]).map(v=>format(v)).join(' · ')+' Hz';
- const delta=(lastYaw-baseline+540)%360-180;$('#yaw').textContent=(held?delta:0).toFixed(1)+'°';
+ const delta=(lastYaw-baseline+540)%360-180;$('#yaw').textContent=(held?delta:lastDelta).toFixed(1)+'°';
  $('#front').textContent=s.front_distance==null?'—':format(s.front_distance*100)+' cm';
  $('#remaining').textContent=s.running?format(s.remaining,1)+' s':'HALTEN';
  $('#active').textContent=s.active?`Fahrprofil: maximal ${format(s.active.frequency)} Hz · ${format(s.active.duty)} % Pulsanteil. Bleibt nach Neustart erhalten.`:'Fahrprofil: bisherige Einstellungen. Entwürfe ändern den normalen Joystick erst nach „Übernehmen“. ';
