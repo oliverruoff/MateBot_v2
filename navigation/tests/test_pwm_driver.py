@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from pwm_driver import pwm_script,output_rates
+from pwm_driver import PwmDriver,pwm_script,output_rates
 import math
 from core import wheels
 
@@ -59,6 +59,33 @@ class ScriptMachine:
 
 
 class PwmScriptTests(unittest.TestCase):
+    def test_startup_refreshes_do_not_restart_warmup_and_reversal_does(self):
+        driver=PwmDriver.__new__(PwmDriver)
+        driver.cfg=dict(motor_start_seconds=1.,motor_start_frequency=40)
+        driver.started_at=None;driver.startup_signs=None
+        self.assertEqual(driver.startup_rates([100]*4,0.),[40]*4)
+        self.assertEqual(driver.startup_rates([100]*4,.9),[40]*4)
+        self.assertEqual(driver.startup_rates([100]*4,1.1),[100]*4)
+        self.assertEqual(driver.startup_rates([-100]*4,1.2),[-40]*4)
+        self.assertEqual(driver.startup_rates([-100]*4,2.3),[-100]*4)
+        driver.startup_rates([0]*4,2.4)
+        self.assertEqual(driver.startup_rates([-100]*4,2.5),[-40]*4)
+
+    def test_crawling_bins_cannot_jump_into_measured_stall_range(self):
+        cfg=dict(steps_per_revolution=200,microsteps=32,wheel_diameter=.079,wheelbase=.31,track_width=.21)
+        factor=6400/(math.pi*.079)
+        for vx,vy,wz in [(.12,0,0),(-.12,0,0),(0,.12,0),(0,-.12,0),(0,0,.4),(0,0,-.4),(.08,.08,.3)]:
+            hz=[v*factor for v in wheels(vx,vy,wz,.31,.21)]
+            scale=min(1.,100/max(abs(h) for h in hz))
+            freq,actual=output_rates([h*scale for h in hz],cfg,[10,20,40,50,80,100],(.12,.4))
+            self.assertLessEqual(max(freq),100)
+            self.assertGreater(max(freq),0)
+            self.assertGreater(sum(a*b for a,b in zip(actual,[vx,vy,wz])),0)
+
+    def test_invalid_frequency_limit_rejected_before_touching_gpio(self):
+        for limit in [0,9,8001,float('nan'),True,'100']:
+            with self.assertRaises(ValueError):PwmDriver(None,dict(motor_max_frequency=limit))
+
     def test_nearest_rates_preserve_six_cm_speed_without_exceeding_limits(self):
         cfg=dict(steps_per_revolution=200,microsteps=32,wheel_diameter=.079,wheelbase=.31,track_width=.21)
         bins=[10,20,40,50,80,100,160,200,250,320,400,500,800,1000,1600,2000,4000,8000]

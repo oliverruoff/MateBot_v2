@@ -73,8 +73,13 @@ class PwmDriver:
     max_frequency = 8000
 
     def __init__(self, pi, cfg, checkpoint=None):
+        limit=cfg.get('motor_max_frequency',8000)
+        if isinstance(limit,bool) or not isinstance(limit,(int,float)) or not math.isfinite(limit) or not 10<=limit<=8000:
+            raise ValueError('Ungültige maximale Motorfrequenz')
+        self.max_frequency=limit
         self.pi=pi; self.cfg=cfg; self.path=Path(checkpoint) if checkpoint else None
         self.starts=0; self.underruns=0; self.active=False; self.closed=False
+        self.started_at=None; self.startup_signs=None
         self.motion=[0.,0.,0.]; self.velocity=[0.,0.,0.]; self.integrated_at=None
         self.last_publish=0.; self.frames={}; self.sequence=0
         self.base=(secrets.randbelow((1<<18)-1)+1)<<12
@@ -147,6 +152,19 @@ class PwmDriver:
         self.last_publish=now
         return seq
 
+    def startup_rates(self,hz,now):
+        signs=tuple(1 if h>0 else -1 if h<0 else 0 for h in hz)
+        if not any(signs):
+            self.started_at=None; self.startup_signs=None
+            return hz
+        if self.started_at is None or self.startup_signs and any(a*b<0 for a,b in zip(signs,self.startup_signs)):
+            self.started_at=now
+        self.startup_signs=signs
+        if now-self.started_at<self.cfg.get('motor_start_seconds',0.):
+            scale=min(1.,self.cfg.get('motor_start_frequency',40)/max(abs(h) for h in hz))
+            return [h*scale for h in hz]
+        return hz
+
     def pump(self,hz,velocity,now):
         self.account(now)
         state,params=self.pi.script_status(self.sid)
@@ -155,7 +173,7 @@ class PwmDriver:
             raise RuntimeError('PWM-Watchdog hat die Motoren gestoppt')
         if params[9] in self.frames:self.velocity=self.frames[params[9]]
         limits=getattr(self,'limits',(self.cfg['manual_max_linear_speed'],self.cfg['manual_max_angular_speed']))
-        freq,actual=output_rates(hz,self.cfg,self.frequencies,limits)
+        freq,actual=output_rates(self.startup_rates(hz,now),self.cfg,self.frequencies,limits)
         dirs=[int(h*s>0) for h,s in zip(hz,self.cfg['direction_signs'])]
         if state not in (2,3):
             self._publish([0]*4,dirs,[0.,0.,0.],now)
@@ -180,6 +198,7 @@ class PwmDriver:
         finally:
             self._force_off(); self.active=False; self.velocity=[0.,0.,0.]
             self.last_output=None
+            self.started_at=None; self.startup_signs=None
 
     def close(self):
         if self.closed:return

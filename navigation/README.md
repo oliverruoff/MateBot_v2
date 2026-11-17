@@ -6,6 +6,14 @@ Checkout bleibt erhalten; die laufende Installation liegt unter
 
 **[Oberfläche öffnen](http://matebot.local:8080)** · kein Cloud-Dienst, alle Assets lokal.
 
+## Aktueller Fahrstand
+
+Die Motoren laufen vorläufig im sehr langsamen Testbetrieb: maximal 100 Hz pro
+Rad (nominal etwa 3,9 mm/s geradeaus), mit einer Sekunde Anlauf bei bis zu 40 Hz.
+Ein voller Joystickausschlag bleibt auf diesen gemessenen Bereich begrenzt.
+Höhere Taktraten führten im realen LiDAR-/Gyro-Test weiterhin zum Stocken; normale
+Fahrgeschwindigkeit und autonome Ankunft sind noch nicht nachgewiesen.
+
 ## Handy: Kamera und Joystick
 
 **[Fahransicht öffnen](http://matebot.local:8080/drive)**. Auf kleinen Displays
